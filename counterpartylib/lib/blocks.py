@@ -1251,7 +1251,7 @@ def follow(db):
             elapsed_time = time.time() - start_time
             sleep_time = config.BACKEND_POLL_INTERVAL - elapsed_time if elapsed_time <= config.BACKEND_POLL_INTERVAL else 0
 
-            logger.debug('Refresh mempool: %s CP txs seen, out of %s total entries (took %ss, next refresh in %ss)' % (
+            logger.info('Refresh mempool: %s CP txs seen, out of %s total entries (took %ss, next refresh in %ss)' % (
                 len(mempool), len(raw_mempool), "{:.2f}".format(elapsed_time, 3), "{:.2f}".format(sleep_time, 3)))
 
             # Wait
