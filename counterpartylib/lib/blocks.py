@@ -5,6 +5,7 @@ Sieve blockchain for Counterparty transactions, and add them to the database.
 """
 
 import os
+import psutil
 import time
 import binascii
 import struct
@@ -53,6 +54,10 @@ with open(CURR_DIR + '/../mainnet_burns.csv', 'r') as f:
     MAINNET_BURNS = {}
     for line in mainnet_burns_reader:
         MAINNET_BURNS[line['tx_hash']] = line
+
+
+process = psutil.Process(os.getpid())
+
 
 def parse_tx(db, tx):
     """Parse the transaction, return True for success."""
@@ -1251,8 +1256,14 @@ def follow(db):
             elapsed_time = time.time() - start_time
             sleep_time = config.BACKEND_POLL_INTERVAL - elapsed_time if elapsed_time <= config.BACKEND_POLL_INTERVAL else 0
 
-            logger.info('Refresh mempool: %s CP txs seen, out of %s total entries (took %ss, next refresh in %ss)' % (
-                len(mempool), len(raw_mempool), "{:.2f}".format(elapsed_time, 3), "{:.2f}".format(sleep_time, 3)))
+            logger.info('Refresh mempool: %s CP txs seen, out of %s total entries '
+                        '(took %ss, next refresh in %ss, mem %sMB)' % (
+                len(mempool),
+                len(raw_mempool),
+                "{:.2f}".format(elapsed_time, 3),
+                "{:.2f}".format(sleep_time, 3),
+                "{:.2f}".format(process.memory_info().rss / 1000 / 1000)
+            ))
 
             # Wait
             db.wal_checkpoint(mode=apsw.SQLITE_CHECKPOINT_PASSIVE)
