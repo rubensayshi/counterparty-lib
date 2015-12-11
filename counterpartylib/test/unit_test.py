@@ -1,12 +1,13 @@
 #! /usr/bin/python3
 import sys, os, time, tempfile
 import pytest
+import logging
 import util_test
 from util_test import CURR_DIR
 from fixtures.vectors import UNITTEST_VECTOR
 from fixtures.params import DEFAULT_PARAMS as DP
 
-from counterpartylib.lib import (config, util, api, database)
+from counterpartylib.lib import (config, util, api, database, log)
 import server
 
 def setup_module():
@@ -25,6 +26,10 @@ def setup_module():
             raise Exception("Timeout: RPC server not ready after 5s")
         else:
             time.sleep(0.001)
+
+    root_logger = logging.getLogger()    # Get root logger.
+    log.set_up(root_logger, verbose=True, logfile=None, console_logfilter=os.environ.get('COUNTERPARTY_LOGGING', None))
+
 
 def teardown_module(function):
     """Delete the temporary database."""
