@@ -276,7 +276,10 @@ def check_record(record, server_db):
         count = list(cursor.execute(sql, tuple(bindings)))[0]['c']
         if count != 1:
             print(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
-            assert False
+            raise AssertionError("check_record \n" +
+                                 "table=" + record['table'] + " \n" +
+                                 "condiitions=" + ",".join(conditions) + " \n" +
+                                 "bindings=" + ",".join(map(lambda v: str(v), bindings)))
 
 def vector_to_args(vector, functions=[]):
     """Translate from UNITTEST_VECTOR style to function arguments."""
