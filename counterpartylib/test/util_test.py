@@ -3,7 +3,7 @@ This module contains a variety of utility functions used in the test suite.
 """
 
 import os, sys, hashlib, binascii, time, decimal, logging, locale, re, io
-import difflib, json, inspect, tempfile, shutil
+import difflib, json, inspect, tempfile, shutil, pprint
 import apsw, pytest, requests
 from requests.auth import HTTPBasicAuth
 
@@ -275,7 +275,7 @@ def check_record(record, server_db):
 
         count = list(cursor.execute(sql, tuple(bindings)))[0]['c']
         if count != 1:
-            print(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
+            pprint.PrettyPrinter(indent=4).pprint(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
             raise AssertionError("check_record \n" +
                                  "table=" + record['table'] + " \n" +
                                  "condiitions=" + ",".join(conditions) + " \n" +
