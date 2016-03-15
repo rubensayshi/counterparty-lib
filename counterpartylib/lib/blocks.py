@@ -149,7 +149,7 @@ def parse_block(db, block_index, block_time,
 
     assert block_index == util.CURRENT_BLOCK_INDEX
 
-    # Remove undolog records for any block older than we should be tracking 
+    # Remove undolog records for any block older than we should be tracking
     undolog_oldest_block_index = block_index - config.UNDOLOG_MAX_PAST_BLOCKS
     first_undo_index = list(undolog_cursor.execute('''SELECT first_undo_index FROM undolog_block WHERE block_index == ?''',
         (undolog_oldest_block_index,)))
@@ -416,19 +416,23 @@ def initialise(db):
                   ''')
 
 def get_tx_info(tx_hex, block_parser=None, block_index=None):
+    """Get the transaction info. Returns normalized None data for DecodeError and BTCOnlyError."""
+    try:
+        return _get_tx_info(tx_hex, block_parser, block_index)
+    except (DecodeError, BTCOnlyError) as e:
+        # NOTE: For debugging, logger.debug('Could not decode: ' + str(e))
+        return b'', None, None, None, None
+
+def _get_tx_info(tx_hex, block_parser=None, block_index=None):
     """Get the transaction info. Calls one of two subfunctions depending on signature type."""
     if not block_index:
         block_index = util.CURRENT_BLOCK_INDEX
-    try:
-        if util.enabled('multisig_addresses', block_index=block_index):   # Protocol change.
-            tx_info = get_tx_info2(tx_hex, block_parser=block_parser)
-        else:
-            tx_info = get_tx_info1(tx_hex, block_index, block_parser=block_parser)
-    except (DecodeError, BTCOnlyError) as e:
-        # NOTE: For debugging, logger.debug('Could not decode: ' + str(e))
-        tx_info = b'', None, None, None, None
-
-    return tx_info
+    if util.enabled('p2sh_addresses', block_index=block_index):   # Protocol change.
+        return  get_tx_info3(tx_hex, block_parser=block_parser)
+    elif util.enabled('multisig_addresses', block_index=block_index):   # Protocol change.
+        return get_tx_info2(tx_hex, block_parser=block_parser)
+    else:
+        return get_tx_info1(tx_hex, block_index, block_parser=block_parser)
 
 def get_tx_info1(tx_hex, block_index, block_parser=None):
     """Get singlesig transaction info.
@@ -546,7 +550,10 @@ def get_tx_info1(tx_hex, block_index, block_parser=None):
 
     return source, destination, btc_amount, fee, data
 
-def get_tx_info2(tx_hex, block_parser=None):
+def get_tx_info3(tx_hex, block_parser=None):
+    return get_tx_info2(tx_hex, block_parser=block_parser, p2sh_support=True)
+
+def get_tx_info2(tx_hex, block_parser=None, p2sh_support=False):
     """Get multisig transaction info.
     The destinations, if they exists, always comes before the data output; the
     change, if it exists, always comes after.
@@ -590,6 +597,11 @@ def get_tx_info2(tx_hex, block_parser=None):
 
         return destination, data
 
+    def decode_scripthash(asm):
+        destination = script.base58_check_encode(binascii.hexlify(asm[1]).decode('utf-8'), config.P2SH_ADDRESSVERSION)
+
+        return destination, None
+
     def decode_checkmultisig(asm):
         pubkeys, signatures_required = script.get_checkmultisig(asm)
         chunk = b''
@@ -630,6 +642,8 @@ def get_tx_info2(tx_hex, block_parser=None):
             new_destination, new_data = decode_checksig(asm)
         elif asm[-1] == 'OP_CHECKMULTISIG':
             new_destination, new_data = decode_checkmultisig(asm)
+        elif p2sh_support and asm[0] == 'OP_HASH160' and asm[-1] == 'OP_EQUAL' and len(asm) == 3:
+            new_destination, new_data = decode_scripthash(asm)
         else:
             raise DecodeError('unrecognised output type')
         assert not (new_destination and new_data)
@@ -676,6 +690,10 @@ def get_tx_info2(tx_hex, block_parser=None):
             new_source, new_data = decode_checkmultisig(asm)
             if new_data or not new_source:
                 raise DecodeError('data in source')
+        elif p2sh_support and asm[0] == 'OP_HASH160' and asm[-1] == 'OP_EQUAL' and len(asm) == 3:
+            new_source, new_data = decode_scripthash(asm)
+            if new_data or not new_source:
+                raise DecodeError('data in source')
         else:
             raise DecodeError('unrecognised source type')
 
@@ -715,7 +733,7 @@ def reinitialise(db, block_index=None):
     if block_index:
         cursor.execute('''DELETE FROM transactions WHERE block_index > ?''', (block_index,))
         cursor.execute('''DELETE FROM blocks WHERE block_index > ?''', (block_index,))
-        
+
     cursor.close()
 
 def reparse(db, block_index=None, quiet=False):
@@ -723,7 +741,7 @@ def reparse(db, block_index=None, quiet=False):
     to the end of that block.
     """
     def reparse_from_undolog(db, block_index, quiet):
-        """speedy reparse method that utilizes the undolog. 
+        """speedy reparse method that utilizes the undolog.
         if fails, fallback to the full reparse method"""
         if not block_index:
             return False # Can't reparse from undolog
@@ -746,7 +764,7 @@ def reparse(db, block_index=None, quiet=False):
             undo_indexes = collections.OrderedDict()
             for result in results:
                 undo_indexes[result[0]] = result[1]
-                
+
             undo_start_block_index = block_index + 1
 
             if undo_start_block_index not in undo_indexes:
@@ -776,7 +794,7 @@ def reparse(db, block_index=None, quiet=False):
 
         undolog_cursor.close()
         return True
-    
+
     if block_index:
         logger.info('Rolling back transactions to block {}.'.format(block_index))
     else:
@@ -788,7 +806,7 @@ def reparse(db, block_index=None, quiet=False):
     reparsed = reparse_from_undolog(db, block_index, quiet)
 
     cursor = db.cursor()
-    
+
     if not reparsed:
         if block_index:
             logger.info("Could not roll back from undolog. Performing full reparse instead...")
@@ -952,7 +970,7 @@ def kickstart(db, bitcoind_dir):
                 tx_chunks = [transactions[i:i+90] for i in range(0, len(transactions), 90)]
                 for tx_chunk in tx_chunks:
                     sql = '''INSERT INTO transactions
-                                (tx_index, tx_hash, block_index, block_hash, block_time, source, destination, btc_amount, fee, data) 
+                                (tx_index, tx_hash, block_index, block_hash, block_time, source, destination, btc_amount, fee, data)
                              VALUES '''
                     bindings = ()
                     bindings_place = []
@@ -1047,7 +1065,7 @@ def follow(db):
     not_supported_sorted = collections.deque()
     # ^ Entries in form of (block_index, tx_hash), oldest first. Allows for easy removal of past, unncessary entries
     cursor = db.cursor()
-    
+
     # a reorg can happen without the block count increasing, or even for that
     # matter, with the block count decreasing. This should only delay
     # processing of the new blocks a bit.
@@ -1120,8 +1138,8 @@ def follow(db):
             block = backend.getblock(block_hash)
             previous_block_hash = bitcoinlib.core.b2lx(block.hashPrevBlock)
             block_time = block.nTime
-            txhash_list = backend.get_txhash_list(block)
-            raw_transactions = backend.getrawtransaction_batch(txhash_list)
+            txhash_list, raw_transactions = backend.get_tx_list(block)
+
             with db:
                 util.CURRENT_BLOCK_INDEX = block_index
 
@@ -1143,7 +1161,7 @@ def follow(db):
                 for tx_hash in txhash_list:
                     tx_hex = raw_transactions[tx_hash]
                     tx_index = list_tx(db, block_hash, block_index, block_time, tx_hash, tx_index, tx_hex)
-                
+
                 # Parse the transactions in the block.
                 new_ledger_hash, new_txlist_hash, new_messages_hash, found_messages_hash = parse_block(db, block_index, block_time)
 
@@ -1161,7 +1179,7 @@ def follow(db):
                 str(block_index), "{:.2f}".format(time.time() - start_time, 3),
                 new_ledger_hash[-5:], new_txlist_hash[-5:], new_messages_hash[-5:],
                 (' [overwrote %s]' % found_messages_hash) if found_messages_hash and found_messages_hash != new_messages_hash else ''))
-            
+
             # Increment block index.
             block_count = backend.getblockcount()
             block_index += 1
@@ -1266,7 +1284,7 @@ def follow(db):
                     tx_hash, new_message = message
                     new_message['tx_hash'] = tx_hash
                     cursor.execute('''INSERT INTO mempool VALUES(:tx_hash, :command, :category, :bindings, :timestamp)''', new_message)
-                    
+
             refresh_start_time = time.time()
             # let the backend refresh it's mempool stored data
             # Sometimes the transactions can’t be found: `{'code': -5, 'message': 'No information available about transaction'}`
