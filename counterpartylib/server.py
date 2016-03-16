@@ -15,6 +15,7 @@ import socket
 import signal
 import appdirs
 import platform
+import bitcoin
 from urllib.parse import quote_plus as urlencode
 
 from counterpartylib.lib import api, config, util, exceptions, blocks, check, backend, database, transaction, script, log
@@ -307,6 +308,7 @@ def initialise(database_file=None, log_file=None, api_log_file=None,
     else:
         config.PREFIX = b'CNTRPRTY'             # 8 bytes
 
+    bitcoin.SelectParams('testnet' if config.TESTNET else 'mainnet')
     # (more) Testnet
     if config.TESTNET:
         config.MAGIC_BYTES = config.MAGIC_BYTES_TESTNET

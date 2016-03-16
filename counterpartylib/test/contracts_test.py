@@ -1,26 +1,80 @@
-# -*- coding: utf8 -*-
-import os
+"""
+This module tests for compability with Ethereum's Smart Contracts.
+"""
 
-import bitcoin
 import pytest
+import server
+from counterpartylib.lib import (util, config, database, log)
+from counterpartylib.lib.messages import execute
+from counterpartylib.lib.evm import (blocks, processblock, ethutils, abi, address)
+import rlp
+import binascii
+import os
+import sys
+import logging
 import serpent
-from rlp.utils import decode_hex, encode_hex
 
-from ethereum import tester, utils, abi
-from ethereum.slogging import set_level
-from ethereum.utils import safe_ord
+from counterpartylib.test import contracts_tester as tester
+from counterpartylib.test import util_test
 
-try:
-    from c_secp256k1 import ecdsa_sign_raw
-except ImportError:
-    import warnings
-    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
+CURR_DIR = os.path.dirname(os.path.realpath(os.path.join(os.getcwd(), os.path.expanduser(__file__))))
+sys.path.append(os.path.normpath(os.path.join(CURR_DIR, '..')))
 
-    from bitcoin import ecdsa_raw_sign as ecdsa_sign_raw
+# globals initialized by setup_function
+db, cursor, logger = None, None, None
+CLEANUP_FILES = []
 
-# customize VM log output to your needs
-# hint: use 'py.test' with the '-s' option to dump logs to the console
-tester.set_logging_level(0)
+
+def state():
+    """"create a tester.state with latest block"""
+    global db
+
+    cursor = db.cursor()
+    cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT 1''')
+    latest_block = list(cursor.fetchall())[0]
+    cursor.close()
+
+    return tester.state(db, latest_block['block_hash'])
+
+
+def setup_module():
+    """Initialise the database with unittest fixtures"""
+    # global the DB/cursor for other functions to access
+    global db, cursor, logger
+
+    db = util_test.init_database(CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql', 'fixtures.countracts_test.db')
+    logger = logging.getLogger(__name__)
+    db.setrollbackhook(lambda: logger.debug('ROLLBACK'))
+    database.update_version(db)
+
+
+def teardown_module():
+    """Delete the temporary database."""
+    util_test.remove_database_files(config.DATABASE)
+
+
+def setup_function(function):
+    global db, cursor
+
+    # start transaction so we can rollback on teardown
+    cursor = db.cursor()
+    cursor.execute('''BEGIN''')
+
+
+def teardown_function(function):
+    global db, cursor
+    cursor.execute('''ROLLBACK''')
+
+    # cleanup files marked for cleanup
+    for file in CLEANUP_FILES:
+        if os.path.isfile(file):
+            os.remove(file)
+
+
+def open_cleanonteardown(filename, *args, **kwargs):
+    CLEANUP_FILES.append(filename)
+
+    return open(filename, *args, **kwargs)
 
 
 # Test EVM contracts
@@ -33,17 +87,24 @@ def main(a,b):
 def test_evm():
     evm_code = serpent.compile(serpent_code)
     translator = abi.ContractTranslator(serpent.mk_full_signature(
-                                        serpent_code))
+        serpent_code))
     data = translator.encode('main', [2, 5])
-    s = tester.state()
+    s = state()
     c = s.evm(evm_code)
     o = translator.decode('main', s.send(tester.k0, c, 0, data))
     assert o == [32]
 
 
+def test_evm2():
+    s = state()
+    c = s.abi_contract(serpent_code)
+
+    assert c.main(2, 5) == 32
+
+
 # Test serpent compilation of variables using _with_, doing a simple
 # arithmetic calculation 20 * 30 + 10 = 610
-sixten_code =\
+sixten_code = \
     '''
 (with 'x 10
     (with 'y 20
@@ -59,11 +120,16 @@ sixten_code =\
 
 
 def test_sixten():
-    s = tester.state()
-    c = decode_hex('1231231231231234564564564564561231231231')
-    s.block.set_code(c, tester.serpent.compile_lll(sixten_code))
-    o1 = s.send(tester.k0, c, 0)
-    assert utils.big_endian_to_int(o1) == 610
+    """no idea why, but this tests _lll"""
+    s = state()
+
+    # mock tx
+    tx, tx_obj, block_obj = s.mock_tx(tester.a0, tester.a1, 0, b'')
+
+    # set code for contract
+    s.block.set_code(tx_obj, tester.a1, tester.serpent.compile_lll(sixten_code))
+    o1 = s.send(tester.k0, tester.a1, 0)
+    assert ethutils.big_endian_to_int(o1) == 610
 
 
 with_code = \
@@ -106,12 +172,13 @@ def f4():
 
 
 def test_with():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(with_code)
     assert c.f1() == [5, 7, 8, 5]
     assert c.f2() == 2
     assert c.f3() == 7
     assert c.f4() == [5, 7, 5, 5]
+
 
 # Test Serpent's import mechanism
 
@@ -135,12 +202,12 @@ return(x.double(5))
 
 
 def test_returnten():
-    s = tester.state()
-    open(filename, 'w').write(mul2_code)
+    s = state()
+    open_cleanonteardown(filename, 'w').write(mul2_code)
     c = s.contract(returnten_code)
     o1 = s.send(tester.k0, c, 0)
     os.remove(filename)
-    assert utils.big_endian_to_int(o1) == 10
+    assert ethutils.big_endian_to_int(o1) == 10
 
 
 # Test inset
@@ -167,11 +234,12 @@ def foo():
 
 
 def test_inset():
-    s = tester.state()
-    open(filename2, 'w').write(inset_inner_code)
+    s = state()
+    open_cleanonteardown(filename2, 'w').write(inset_inner_code)
     c = s.abi_contract(inset_outer_code)
     assert c.foo() == 22
     os.remove(filename2)
+
 
 # Inset at the end instead
 
@@ -198,8 +266,8 @@ inset("%s")
 
 
 def test_inset2():
-    s = tester.state()
-    open(filename25, 'w').write(inset_inner_code2)
+    s = state()
+    open_cleanonteardown(filename25, 'w').write(inset_inner_code2)
     c = s.abi_contract(inset_outer_code2)
     assert c.foo() == 22
     os.remove(filename25)
@@ -207,7 +275,7 @@ def test_inset2():
 
 # Test a simple namecoin implementation
 
-namecoin_code =\
+namecoin_code = \
     '''
 def main(k, v):
     if !self.storage[k]:
@@ -219,7 +287,7 @@ def main(k, v):
 
 
 def test_namecoin():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(namecoin_code)
     o1 = c.main("george", 45)
     assert o1 == 1
@@ -228,7 +296,79 @@ def test_namecoin():
     o3 = c.main("harry", 60)
     assert o3 == 1
 
-    assert s.block.to_dict()
+
+# Test a simple text return (test not originally in pyeth)
+simple_text_return_code = '''
+def returntext(v):
+    return(text("testing123"):str)
+'''
+
+
+def test_simple_text_return():
+    s = state()
+    c = s.abi_contract(simple_text_return_code)
+
+    assert c.returntext() == bytes("testing123", "utf8")
+
+
+# Test a simple send (test not originally in pyeth)
+send_code = '''
+def send(v):
+    send(msg.sender, v)
+'''
+
+
+def test_send():
+    s = state()
+    c = s.abi_contract(send_code)
+
+    startbalance = s.block.get_balance(tester.a2)
+    value = 1000000  # amount send into the contract
+    v = 30000  # v= for the contract, amount we get back
+    gcost = 53356  # gascost
+    c.send(v, value=value, sender=tester.a2)
+    assert s.block.get_balance(tester.a2) == startbalance - gcost - value + v
+
+
+# Test a simple send to hardcoded address (test not originally in pyeth)
+send_arg_code = '''
+def send(s:address, v):
+    send(s, v)
+'''
+
+
+def test_send_arg():
+    a2 = address.Address.normalize(tester.a2)
+
+    s = state()
+    c = s.abi_contract(send_arg_code)
+
+    logger.warn(a2.int())
+
+    startbalance = s.block.get_balance(tester.a2)
+    v = 30000  # v = for the contract, amount we get back
+    c.send(tester.a2, v, value=10000000, sender=tester.a1)
+    assert s.block.get_balance(tester.a2) == startbalance + v
+
+
+# Test a simple send to hardcoded address (test not originally in pyeth)
+send_hardcoded_code = '''
+def send(v):
+    send(%s, v)
+'''
+
+
+def test_send_hardcoded():
+    a2 = address.Address.normalize(tester.a2)
+
+    s = state()
+    c = s.abi_contract(send_hardcoded_code % (a2.int(), ))
+
+    startbalance = s.block.get_balance(tester.a2)
+    v = 30000  # v = for the contract, amount we get back
+    c.send(v, value=10000000, sender=tester.a1)
+    assert s.block.get_balance(tester.a2) == startbalance + v
+
 
 # Test a simple currency implementation
 
@@ -238,10 +378,10 @@ data balances[2^160]
 def init():
     self.balances[msg.sender] = 1000
 
-def query(addr):
+def query(addr:address):
     return(self.balances[addr])
 
-def send(to, value):
+def send(to:address, value):
     from = msg.sender
     fromvalue = self.balances[from]
     if fromvalue >= value:
@@ -255,16 +395,20 @@ def send(to, value):
 
 
 def test_currency():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(currency_code, sender=tester.k0)
-    o1 = c.send(tester.a2, 200)
+
+    o1 = c.query(tester.k0)
+    assert o1 == 1000
+    o1 = c.send(tester.a2, 200, sender=tester.a0)
     assert o1 == 1
-    o2 = c.send(tester.a2, 900)
+    o2 = c.send(tester.a2, 900, sender=tester.a0)
     assert o2 == 0
     o3 = c.query(tester.a0)
     assert o3 == 800
     o4 = c.query(tester.a2)
     assert o4 == 200
+
 
 # Test a data feed
 
@@ -289,7 +433,7 @@ def get(k):
 
 
 def test_data_feeds():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(data_feed_code, sender=tester.k0)
     o2 = c.get(500)
     assert o2 == 0
@@ -302,6 +446,7 @@ def test_data_feeds():
     o6 = c.set(500, 726)
     assert o6 == 1
     return s, c
+
 
 # Test an example hedging contract, using the data feed. This tests
 # contracts calling other contracts
@@ -331,7 +476,7 @@ def main(datafeed, index):
         c = self.datafeed.get(self.index)
         othervalue = ethvalue * c
         self.fiatValue = othervalue
-        self.maturity = block.timestamp + 500
+        self.maturity = block.timestamp + 20000
         return(othervalue)
     else:
         othervalue = self.fiatValue
@@ -349,33 +494,44 @@ def main(datafeed, index):
 
 
 def test_hedge():
+    # run previous test to setup data feeds
     s, c = test_data_feeds()
+
+    # create contract
     c2 = s.abi_contract(hedge_code, sender=tester.k0)
-    # Have the first party register, sending 10^16 wei and
-    # asking for a hedge using currency code 500
-    o1 = c2.main(c.address, 500, value=10**16)
+
+    # Have the first party register, sending 10000000 XCPtoshi and asking for a hedge using currency code 500
+    o1 = c2.main(c.address.int(), 500, value=10000000, sender=tester.k0)
     assert o1 == 1
-    # Have the second party register. It should receive the
-    # amount of units of the second currency that it is
-    # entitled to. Note that from the previous test this is
-    # set to 726
-    o2 = c2.main(0, 0, value=10**16, sender=tester.k2)
-    assert o2 == 7260000000000000000
+
+    # Have the second party register.
+    # It should receive the amount of units of the second currency that it is entitled to.
+    # Note that from the previous test this is set to 726
+    o2 = c2.main(0, 0, value=10000000, sender=tester.k2)
+    assert o2 == 7260000000
+
+    # SNAPSHOT
     snapshot = s.snapshot()
-    # Set the price of the asset down to 300 wei
+
+    # Set the price of the asset down to 300 wei, through the data feed contract
     o3 = c.set(500, 300)
     assert o3 == 1
+
     # Finalize the contract. Expect code 3, meaning a margin call
     o4 = c2.main(0, 0)
     assert o4 == 3
+
+    # REVERT TO SNAPSHOT
     s.revert(snapshot)
-    # Don't change the price. Finalize, and expect code 5, meaning
-    # the time has not expired yet
+
+    # Don't change the price. Finalize, and expect code 5, meaning the time has not expired yet
     o5 = c2.main(0, 0)
     assert o5 == 5
+
+    # Mine 100 blocks
     s.mine(100, tester.a3)
-    # Mine ten blocks, and try. Expect code 4, meaning a normal execution
-    # where both get their share
+
+    # Expect code 4, meaning a normal execution where both get their share
     o6 = c2.main(0, 0)
     assert o6 == 4
 
@@ -399,7 +555,7 @@ def f3():
 
 
 def test_lifo():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(arither_code)
     c.f2()
     assert c.f3() == 1010
@@ -407,6 +563,11 @@ def test_lifo():
 
 # Test suicides and suicide reverts
 suicider_code = '''
+data creator
+
+def init():
+    self.creator = msg.sender
+
 def mainloop(rounds):
     self.storage[15] = 40
     self.suicide()
@@ -414,16 +575,17 @@ def mainloop(rounds):
     while i < rounds:
         i += 1
         self.storage[i] = i
+    return(i)
 
 def entry(rounds):
     self.storage[15] = 20
-    self.mainloop(rounds, gas=msg.gas - 600)
+    return self.mainloop(rounds, gas=msg.gas - 600)
 
 def ping_ten():
     return(10)
 
 def suicide():
-    suicide(0)
+    suicide(self.creator)
 
 def ping_storage15():
     return(self.storage[15])
@@ -431,27 +593,26 @@ def ping_storage15():
 
 
 def test_suicider():
-    s = tester.state()
+    s = state()
+
     c = s.abi_contract(suicider_code)
-    prev_gas_limit = tester.gas_limit
-    tester.gas_limit = 200000
-    # Run normally: suicide processes, so the attempt to ping the
-    # contract fails
-    c.entry(5)
+    # Run normally: suicide processes, so the attempt to ping the contract fails
+    assert c.entry(5) == 5
     o2 = c.ping_ten()
     assert o2 is None
+
     c = s.abi_contract(suicider_code)
     # Run the suicider in such a way that it suicides in a sub-call,
-    # then runs out of gas, leading to a revert of the suicide and the
-    # storage mutation
-    c.entry(8000)
-    # Check that the suicide got reverted
+    # then runs out of gas, leading to a revert of the suicide and the storage mutation
+    o1 = c.entry(8000)
+    assert o1 == 0
+
+    # Check that the suicide got reverted and the contract still works
     o2 = c.ping_ten()
     assert o2 == 10
-    # Check that the storage op got reverted
+    # Check that the storage op got reverted and the contract still works
     o3 = c.ping_storage15()
     assert o3 == 20
-    tester.gas_limit = prev_gas_limit
 
 
 # Test reverts
@@ -462,12 +623,12 @@ def entry():
     self.recurse(gas=100000)
 
 def non_recurse():
-    send(7, 9)
+    send(%s, 9)
     self.storage[8080] = 4040
     self.storage[160160] = 2020
 
 def recurse():
-    send(8, 9)
+    send(%s, 9)
     self.storage[8081] = 4039
     self.storage[160161] = 2019
     self.recurse()
@@ -477,13 +638,22 @@ def recurse():
 
 
 def test_reverter():
-    s = tester.state()
-    c = s.abi_contract(reverter_code, endowment=10**15)
+    a1 = address.Address.normalize(tester.a1)
+    a2 = address.Address.normalize(tester.a2)
+
+    s = state()
+
+    # get balances before contracts
+    a1b = s.block.get_balance(a1.base58())
+    a2b = s.block.get_balance(a2.base58())
+
+    c = s.abi_contract(reverter_code % (a1.int(), a2.int()), endowment=100000)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(decode_hex('0'*39+'7')) == 9
+    assert s.block.get_balance(tester.a1) == a1b + 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(decode_hex('0'*39+'8')) == 0
+    assert s.block.get_balance(tester.a2) == a2b + 0
+
 
 # Test stateless contracts
 
@@ -509,12 +679,12 @@ return(self.storage[1])
 
 
 def test_callcode():
-    s = tester.state()
-    open(filename3, 'w').write(add1_code)
+    s = state()
+    open_cleanonteardown(filename3, 'w').write(add1_code)
     c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0)
-    os.remove(filename3)
-    assert utils.big_endian_to_int(o1) == 64
+
+    assert ethutils.big_endian_to_int(o1) == 64
 
 
 # https://github.com/ethereum/serpent/issues/8
@@ -527,9 +697,10 @@ def main():
 
 
 def test_array():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(array_code)
     assert c.main() == [1]
+
 
 array_code2 = '''
 def main():
@@ -541,9 +712,10 @@ def main():
 
 
 def test_array2():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(array_code2)
     assert c.main() == [1]
+
 
 array_code3 = """
 def main():
@@ -553,7 +725,7 @@ def main():
 
 
 def test_array3():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(array_code3)
     assert c.main() == [0, 0, 0]
 
@@ -579,7 +751,7 @@ def get(k):
 
 
 def test_calls():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(calltest_code)
     c.main()
     assert 12345 == c.get(1)
@@ -652,7 +824,7 @@ def testping2(x):
 
 
 def test_storage_objects():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(storage_object_test_code)
     c.ping()
     assert 1 == c.query_chessboard(0, 0)
@@ -664,8 +836,8 @@ def test_storage_objects():
     assert 0 == c.query_items(0, 2)
     assert 9 == c.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
-            557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == c.query_person()
+            557, 0, 0, 0, 558,
+            657, 0, 0, 0, 658] == c.query_person()
     assert [361, 441] == c.testping(19, 21)
 
 
@@ -719,7 +891,7 @@ def query_person():
 
 
 def test_infinite_storage_objects():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(infinite_storage_object_test_code)
     c.ping()
     assert 1 == c.query_chessboard(0, 0)
@@ -731,8 +903,9 @@ def test_infinite_storage_objects():
     assert 0 == c.query_items(0, 2)
     assert 9 == c.query_items(1, 2)
     assert [555, 556, 656, 559, 1659,
-            557, 0,   0,   0,   558,
-            657, 0,   0,   0,  658] == c.query_person()
+            557, 0, 0, 0, 558,
+            657, 0, 0, 0, 658] == c.query_person()
+
 
 fail1 = """
 data person(head, arms[2](elbow, fingers[5]), legs[2])
@@ -780,7 +953,7 @@ def main():
 
 
 def test_storagevar_fails():
-    s = tester.state()
+    s = state()
     success1, success2, success3, success4, success5, success6 = \
         0, 0, 0, 0, 0, 0
     try:
@@ -821,7 +994,7 @@ def test_storagevar_fails():
 
 
 def test_type_system_fails():
-    s = tester.state()
+    s = state()
     success7 = False
 
     try:
@@ -841,9 +1014,10 @@ def main():
 
 
 def test_returnarray_code():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(working_returnarray_code)
     assert c.main() == [1, 2, 3]
+
 
 crowdfund_code = """
 data campaigns[2^80](recipient, goal, deadline, contrib_total, contrib_count, contribs[2^50](sender, value))
@@ -904,31 +1078,52 @@ def clear(self, id):
 
 
 def test_crowdfund():
-    s = tester.state()
-    c = s.abi_contract(crowdfund_code)
-    # Create a campaign with id 100
-    c.create_campaign(100, 45, 100000, 2)
-    # Create a campaign with id 200
-    c.create_campaign(200, 48, 100000, 2)
-    # Make some contributions
-    c.contribute(100, value=1, sender=tester.k1)
+    """
+    test crowdfund smart contract, keep in mind that we create a new block for every contract call
+     so we need a generous TTL
+    """
+
+    s = state()
+    c = s.abi_contract(crowdfund_code)  # tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt
+
+    ttlblocks = 20
+    ttl = ttlblocks * 1000  # block_index * 1000 for mock timestamps
+
+    # Create a campaign with id 100, recipient '45', target 100000 and ttl 20 blocks
+    recipient100 = address.Address(data=address.Address.normalizedata(45), version=config.ADDRESSVERSION)  # mfWxJ45yp2SFn7UciZyNpvDKrzbnzaxGAt
+    c.create_campaign(100, recipient100.int(), 100000, ttl)
+    # Create a campaign with id 200, recipient '48', target 100000 and ttl 20 blocks
+    recipient200 = address.Address(data=address.Address.normalizedata(48), version=config.ADDRESSVERSION)  # mfWxJ45yp2SFn7UciZyNpvDKrzboRgnPSZ
+    c.create_campaign(200, recipient200.int(), 100000, ttl)
+
+    # Make some contributions to campaign 100
+    c.contribute(100, value=1, sender=tester.k1)  # mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns
     assert 1 == c.progress_report(100)
-    c.contribute(200, value=30000, sender=tester.k2)
-    c.contribute(100, value=59049, sender=tester.k3)
+    c.contribute(100, value=59049, sender=tester.k2)  # mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj
     assert 59050 == c.progress_report(100)
-    c.contribute(200, value=70001, sender=tester.k4)
-    # Expect the 100001 units to be delivered to the destination
-    # account for campaign 2
-    assert 100001 == s.block.get_balance(utils.int_to_addr(48))
+
+    # Make some contributions to campaign 200
+    c.contribute(200, value=30000, sender=tester.k3)  # myAtcJEHAsDLbTkai6ipWDZeeL7VkxXsiM
+    assert 30000 == c.progress_report(200)
+
+    # This contribution should trigger the delivery
+    c.contribute(200, value=70001, sender=tester.k4)  # munimLLHjPhGeSU5rYB2HN79LJa8bRZr5b
+
+    # Expect the 100001 units to be delivered to the destination account for campaign 2
+    assert 100001 == s.block.get_balance(recipient200)
+
+    # Mine some blocks to test expire the campaign, not sure how many are needed so just do 20
     mida1 = s.block.get_balance(tester.a1)
-    mida3 = s.block.get_balance(tester.a3)
-    # Mine 5 blocks to expire the campaign
-    s.mine(5)
-    # Ping the campaign after expiry
-    c.contribute(100, value=1)
+    mida3 = s.block.get_balance(tester.a2)
+    s.mine(ttlblocks)
+
+    # Ping the campaign after expiry to trigger the refund
+    c.contribute(100, value=1, sender=tester.a0)
+
     # Expect refunds
     assert mida1 + 1 == s.block.get_balance(tester.a1)
-    assert mida3 + 59049 == s.block.get_balance(tester.a3)
+    assert mida3 + 59049 == s.block.get_balance(tester.a2)
+
 
 saveload_code = """
 
@@ -947,7 +1142,7 @@ import bitcoin
 
 
 def test_saveload():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(saveload_code)
     o = c.kall()
     assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
@@ -969,11 +1164,12 @@ save(self.buf2, mystr, chars=4)
 
 
 def test_saveload2():
-    s = tester.state()
+    s = state()
     c = s.contract(saveload_code2)
     s.send(tester.k0, c, 0)
-    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == b'01ab' + b'\x00' * 28
-    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == b'01ab' + b'\x00' * 28
+
+    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 0)) == b'01ab' + b'\x00' * 28
+    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 1)) == b'01ab' + b'\x00' * 28
 
 
 sdiv_code = """
@@ -983,7 +1179,7 @@ def kall():
 
 
 def test_sdiv():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(sdiv_code)
     assert [-4, -2] == c.kall()
 
@@ -1004,10 +1200,11 @@ def argkall(args:arr):
 
 
 def test_argcall():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(basic_argcall_code)
     assert 375 == c.argcall([5, 7, 3])
     assert 376 == c.argkall([6, 7, 3])
+
 
 more_complex_argcall_code = """
 def argcall(args:arr):
@@ -1021,7 +1218,7 @@ def argkall(args:arr):
 
 
 def test_argcall2():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(more_complex_argcall_code)
     assert [4, 8] == c.argcall([2, 4])
     assert [6, 10] == c.argkall([3, 5])
@@ -1063,13 +1260,13 @@ def sort(args:arr):
 
 @pytest.mark.timeout(100)
 def test_sort():
-    set_level(None, 'info')
-    s = tester.state()
+    s = state()
     c = s.abi_contract(sort_code)
     assert c.sort([9]) == [9]
     assert c.sort([9, 5]) == [5, 9]
     assert c.sort([9, 3, 5]) == [3, 5, 9]
     assert c.sort([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
+
 
 filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
 
@@ -1088,12 +1285,12 @@ def test(args:arr):
 
 @pytest.mark.timeout(100)
 def test_indirect_sort():
-    set_level(None, 'info')
-    s = tester.state()
-    open(filename9, 'w').write(sort_code)
+    s = state()
+    open_cleanonteardown(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code)
     assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
     os.remove(filename9)
+
 
 multiarg_code = """
 def kall(a:arr, b, c:arr, d:str, e):
@@ -1103,10 +1300,11 @@ def kall(a:arr, b, c:arr, d:str, e):
 
 
 def test_multiarg_code():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(multiarg_code)
     o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
-    assert o == [862541, safe_ord('d') + safe_ord('o') + safe_ord('g'), 4]
+    assert o == [862541, ethutils.safe_ord('d') + ethutils.safe_ord('o') + ethutils.safe_ord('g'), 4]
+
 
 peano_code = """
 macro padd($x, psuc($y)):
@@ -1158,7 +1356,7 @@ def main():
 
 
 def test_macros():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(peano_code)
     assert c.main() == [27, 120]
 
@@ -1199,9 +1397,9 @@ return(e)
 
 
 def test_types():
-    s = tester.state()
+    s = state()
     c = s.contract(type_code)
-    assert utils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
+    assert ethutils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
 
 
 ecrecover_code = """
@@ -1211,21 +1409,20 @@ def test_ecrecover(h, v, r, s):
 
 
 def test_ecrecover():
-    s = tester.state()
+    """
+    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them
+    """
+    s = state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = encode_hex(utils.sha3('some big long brainwallet password'))
-    pub = bitcoin.privtopub(priv)
+    H = 60772363713814795336605161565488663769306106990467902980560042300358765319404
+    V = 27
+    R = 90287243237479221899775907091281500587081321452634188922390320940254754609975
+    S = 24052755845221258772445669055700842241658207900505567178705869501444775369481
+    pubkey = 794520059615976424790363096434176409370405942122
 
-    msghash = encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = ecdsa_sign_raw(msghash, priv)
-    assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
-
-    addr = utils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
-    assert utils.big_endian_to_int(utils.privtoaddr(priv)) == addr
-
-    result = c.test_ecrecover(utils.big_endian_to_int(decode_hex(msghash)), V, R, S)
-    assert result == addr
+    result = c.test_ecrecover(H, V, R, S)
+    assert result == pubkey
 
 
 sha256_code = """
@@ -1235,16 +1432,35 @@ def main():
 
 
 def test_sha256():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(sha256_code)
     assert c.main() == [
-        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2**256,
-        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2**256
+        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2 ** 256,
+        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256,
+        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256
     ]
+
+
+ripemd160_code = """
+def main():
+    return([ripemd160(0, chars=0), ripemd160(3), ripemd160(text("doge"), chars=3), ripemd160(text("dog"):str), ripemd160([0,0,0,0,0]:arr), ripemd160([0,0,0,0,0,0], items=5)]:arr)
+"""
+
+
+def test_ripemd160():
+    s = state()
+    c = s.abi_contract(ripemd160_code)
+    assert c.main() == [
+        0x9c1185a5c5e9fc54612808977ee8f548b2258d31,
+        0x44d90e2d3714c8663b632fcf0f9d5f22192cc4c8,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x9164cab7f680fd7a790080f2e76e049811074349,
+        0x9164cab7f680fd7a790080f2e76e049811074349]
+
 
 sha3_code = """
 def main():
@@ -1253,16 +1469,17 @@ def main():
 
 
 def test_sha3():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(sha3_code)
     assert c.main() == [
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2**256,
-        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2**256,
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2 ** 256,
+        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2 ** 256,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
         0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2**256
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256,
+        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256
     ]
+
 
 types_in_functions_code = """
 type fixedp: [a, b]
@@ -1288,7 +1505,7 @@ def sqrdiv(a, b):
 
 
 def test_types_in_functions():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(types_in_functions_code)
     assert c.sqrdiv(25, 2) == 156
 
@@ -1307,7 +1524,7 @@ def testVerifyTx():
 
 
 def test_more_infinites():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(more_infinites_code)
     assert c.testVerifyTx() == 33
 
@@ -1322,24 +1539,31 @@ def get_prevhashes(k):
     return(o:arr)
 """
 
-@pytest.mark.timeout(100)
+
 def test_prevhashes():
-    set_level(None, 'info')
-    s = tester.state()
+    global db
+
+    s = state()
     c = s.abi_contract(prevhashes_code)
-    s.mine(7)
+
     # Hashes of last 14 blocks including existing one
-    o1 = [x % 2**256 for x in c.get_prevhashes(14)]
-    # hash of self = 0, hash of blocks back to genesis block as is, hash of
-    # blocks before genesis block = 0
-    t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
-        + [0] * 6
+    o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
+
+    cursor = db.cursor()
+    blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (14, )))
+    cursor.close()
+    t1 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks]
+
     assert o1 == t1
-    s.mine(256)
+
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2**256 for x in c.get_prevhashes(270)]
-    t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
-        + [0] * 13
+    o2 = [x % 2 ** 256 for x in c.get_prevhashes(270)]
+
+    cursor = db.cursor()
+    blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (256, )))
+    cursor.close()
+    t2 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks] + [0] * (270 - 256)
+
     assert o2 == t2
 
 
@@ -1353,7 +1577,7 @@ def returnten():
 
 
 def test_abi_contract():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(abi_contract_code)
     assert c.mul2(3) == 6
     assert c.returnten() == 10
@@ -1371,10 +1595,10 @@ def mcopy_test(foo:str, a, b, c):
 
 
 def test_mcopy():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(mcopy_code)
     assert c.mcopy_test("123", 5, 6, 259) == \
-        b'\x00'*31+b'\x05'+b'\x00'*31+b'\x06'+b'\x00'*30+b'\x01\x03'+b'123'
+           b'\x00' * 31 + b'\x05' + b'\x00' * 31 + b'\x06' + b'\x00' * 30 + b'\x01\x03' + b'123'
 
 
 mcopy_code_2 = """
@@ -1391,10 +1615,10 @@ def mcopy_test():
 
 
 def test_mcopy2():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(mcopy_code_2)
     assert c.mcopy_test() == \
-        b''.join([utils.zpad(utils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
+           b''.join([ethutils.zpad(ethutils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
 array_saveload_code = """
@@ -1410,7 +1634,7 @@ def array_saveload():
 
 
 def test_saveload3():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(array_saveload_code)
     assert c.array_saveload() == [1, 2, 3, 4]
 
@@ -1429,7 +1653,7 @@ def t1():
 
 
 def test_string_manipulation():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(string_manipulation_code)
     assert c.t1() == [97, 98]
 
@@ -1459,7 +1683,7 @@ def test2():
 
 
 def test_more_infinite_storage():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(more_infinite_storage_object_code)
     assert c.test2() == [2, 2]
 
@@ -1484,7 +1708,7 @@ def bar(a:arr, m:str, b:arr):
 
 
 def test_double_array():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(double_array_code)
     assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
     assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
@@ -1511,23 +1735,29 @@ def test_chicken(em:address):
 
 
 def test_abi_logging():
-    s = tester.state()
-    c = s.abi_contract(abi_logging_code)
+    s = state()
+
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+    s.log_listeners.append(lambda log: o.append(c._translator.listen(log)))
+
+    c = s.abi_contract(abi_logging_code)
+
     c.test_rabbit(3)
     assert o == [{"_event_type": b"rabbit", "x": 3}]
     o.pop()
+
     c.test_frog(5)
     assert o == [{"_event_type": b"frog", "y": 5}]
     o.pop()
+
     c.test_moose(7, "nine", 11, [13, 15, 17])
     assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
-                 "c": 11, "d": [13, 15, 17]}]
+                  "c": 11, "d": [13, 15, 17]}]
     o.pop()
+
     c.test_chicken(tester.a0)
     assert o == [{"_event_type": b"chicken",
-                  "m": utils.encode_hex(tester.a0)}]
+                  "m": tester.a0}]
     o.pop()
 
 
@@ -1548,8 +1778,8 @@ def bar():
 
 
 def test_new_format():
-    s = tester.state()
-    open(filename4, 'w').write(new_format_inner_test_code)
+    s = state()
+    open_cleanonteardown(filename4, 'w').write(new_format_inner_test_code)
     c = s.abi_contract(new_format_outer_test_code)
     assert c.bar() == 175
 
@@ -1567,13 +1797,14 @@ def register(key, addr:address):
 
 
 def test_abi_address_output():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(abi_address_output_test_code)
-    c.register(123, b'1212121212121212121212121212121212121212')
-    c.register(123, b'3434343434343434343434343434343434343434')
-    c.register(125, b'5656565656565656565656565656565656565656')
-    assert c.get_address(123) == b'1212121212121212121212121212121212121212'
-    assert c.get_address(125) == b'5656565656565656565656565656565656565656'
+    c.register(123, tester.a0)
+    c.register(123, tester.a1)
+    c.register(125, tester.a2)
+    assert c.get_address(123) == tester.a0
+    assert c.get_address(125) == tester.a2
+
 
 filename5 = 'abi_output_tester_1264876521746198724124'
 
@@ -1593,14 +1824,14 @@ def register(key, addr:address):
 
 
 def test_inner_abi_address_output():
-    s = tester.state()
-    open(filename5, 'w').write(abi_address_output_test_code)
+    s = state()
+    open_cleanonteardown(filename5, 'w').write(abi_address_output_test_code)
     c = s.abi_contract(abi_address_caller_code)
-    c.register(123, b'1212121212121212121212121212121212121212')
-    c.register(123, b'3434343434343434343434343434343434343434')
-    c.register(125, b'5656565656565656565656565656565656565656')
-    assert c.get_address(123) == b'1212121212121212121212121212121212121212'
-    assert c.get_address(125) == b'5656565656565656565656565656565656565656'
+    c.register(123, tester.a0)
+    c.register(123, tester.a1)
+    c.register(125, tester.a2)
+    assert c.get_address(123) == tester.a0
+    assert c.get_address(125) == tester.a2
 
 
 string_logging_code = """
@@ -1612,14 +1843,22 @@ def moo():
 
 
 def test_string_logging():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(string_logging_code)
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+
+    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     c.moo()
-    assert o == [{"_event_type": "foo", "x": "bob", "__hash_x": utils.sha3("bob"),
-                  "y": "cow", "__hash_y": utils.sha3("cow"), "z": "dog",
-                  "__hash_z": utils.sha3("dog")}]
+
+    assert o == [{
+        "_event_type": b"foo",
+        "x": b"bob",
+        "__hash_x": ethutils.sha3("bob"),
+        "y": b"cow",
+        "__hash_y": ethutils.sha3("cow"),
+        "z": b"dog",
+        "__hash_z": ethutils.sha3("dog")
+    }]
 
 
 params_code = """
@@ -1639,10 +1878,11 @@ def marble():
 
 
 def test_params_contract():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(params_code, FOO=4, BAR='horse')
     assert c.garble() == 4
-    assert c.marble() == 'horse'
+    assert c.marble() == bytes('horse', 'utf8')
+
 
 prefix_types_in_functions_code = """
 type fixedp: fp_
@@ -1668,59 +1908,6 @@ def sqrdiv(fp_a, fp_b):
 
 
 def test_prefix_types_in_functions():
-    s = tester.state()
+    s = state()
     c = s.abi_contract(prefix_types_in_functions_code)
     assert c.sqrdiv(25, 2) == 156
-
-
-
-# test_evm = None
-# test_sixten = None
-# test_with = None
-# test_returnten = None
-# test_namecoin = None
-# test_inset = None
-# test_currency = None
-# test_data_feeds = None
-# test_hedge = None
-# test_lifo = None
-# test_suicider = None
-# test_reverter = None
-# test_callcode = None
-# test_array = None
-# test_array2 = None
-# test_array3 = None
-# test_calls = None
-# test_storage_objects = None
-# test_infinite_storage_objects = None
-# test_storagevar_fails = None
-# test_type_system_fails = None
-# test_returnarray_code = None
-# test_saveload = None
-# test_saveload2 = None
-# test_crowdfund = None
-# test_sdiv = None
-# test_argcall = None
-# test_argcall2 = None
-# test_sort = None
-# test_indirect_sort = None
-# test_multiarg_code = None
-# test_macros = None
-# test_types = None
-# test_sha256 = None
-# test_sha3 = None
-# test_types_in_functions = None
-# test_more_infinites = None
-# test_prevhashes = None
-# test_abi_contract = None
-# test_mcopy = None
-# test_saveload3 = None
-# test_string_manipulation = None
-# test_more_infinite_storage = None
-# test_double_array = None
-# test_abi_logging = None
-# test_new_format = None
-# test_abi_address_output = None
-# test_string_logging = None
-# test_params_contract = None
-# test_prefix_types_in_functions = None

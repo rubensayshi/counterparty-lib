@@ -1,49 +1,69 @@
-# -*- coding: utf-8 -*-
-# ############# version ##################
-from pkg_resources import get_distribution, DistributionNotFound
-import os.path
-import subprocess
-import re
+def initialise (db):
+    cursor = db.cursor()
 
+    # Contracts
+    cursor.execute('''CREATE TABLE IF NOT EXISTS contracts(
+                      contract_id TEXT PRIMARY KEY,
+                      tx_index INTEGER,
+                      tx_hash TEXT,
+                      block_index INTEGER,
+                      source TEXT,
+                      code BLOB,
+                      nonce INTEGER,
+                      FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index))
+                  ''')
+    cursor.execute('''CREATE INDEX IF NOT EXISTS
+                      source_idx ON contracts (source)
+                   ''')
+    cursor.execute('''CREATE INDEX IF NOT EXISTS
+                      tx_hash_idx ON contracts (tx_hash)
+                   ''')
 
-GIT_DESCRIBE_RE = re.compile('^(?P<version>v\d+\.\d+\.\d+)-(?P<git>\d+-g[a-fA-F0-9]+(?:-dirty)?)$')
+    # Contract Storage
+    cursor.execute('''CREATE TABLE IF NOT EXISTS storage(
+                      contract_id TEXT,
+                      key BLOB,
+                      value BLOB,
+                      PRIMARY KEY(contract_id, `key`),
+                      FOREIGN KEY (contract_id) REFERENCES contracts(contract_id))
+                  ''')
+    cursor.execute('''CREATE INDEX IF NOT EXISTS
+                      contract_id_idx ON contracts(contract_id)
+                   ''')
 
+    # Suicides
+    cursor.execute('''CREATE TABLE IF NOT EXISTS suicides(
+                      contract_id TEXT PRIMARY KEY,
+                      FOREIGN KEY (contract_id) REFERENCES contracts(contract_id))
+                  ''')
 
-__version__ = None
-try:
-    _dist = get_distribution('pyethapp')
-    # Normalize case for Windows systems
-    dist_loc = os.path.normcase(_dist.location)
-    here = os.path.normcase(__file__)
-    if not here.startswith(os.path.join(dist_loc, 'pyethapp')):
-        # not installed, but there is another version that *is*
-        raise DistributionNotFound
-    __version__ = _dist.version
-except DistributionNotFound:
-    pass
+    # Nonces
+    cursor.execute('''CREATE TABLE IF NOT EXISTS nonces(
+                      address TEXT PRIMARY KEY,
+                      nonce INTEGER)
+                  ''')
 
-if not __version__:
-    try:
-        rev = subprocess.check_output(['git', 'describe', '--tags', '--dirty'],
-                                      stderr=subprocess.STDOUT)
-        match = GIT_DESCRIBE_RE.match(rev)
-        if match:
-            __version__ = "{}+git-{}".format(match.group("version"), match.group("git"))
-    except:
-        pass
+    # Executions
+    cursor.execute('''CREATE TABLE IF NOT EXISTS executions(
+                      tx_index INTEGER UNIQUE,
+                      tx_hash TEXT UNIQUE,
+                      block_index INTEGER,
+                      source TEXT,
+                      contract_id TEXT,
+                      gas_price INTEGER,
+                      gas_start INTEGER,
+                      gas_cost INTEGER,
+                      gas_remained INTEGER,
+                      value INTEGER,
+                      data BLOB,
+                      output BLOB,
+                      status TEXT,
+                      FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index))
+                  ''')
+    cursor.execute('''CREATE INDEX IF NOT EXISTS
+                      source_idx ON executions(source)
+                   ''')
+    cursor.execute('''CREATE INDEX IF NOT EXISTS
+                      tx_hash_idx ON executions(tx_hash)
+                   ''')
 
-if not __version__:
-    __version__ = 'undefined'
-
-# ########### endversion ##################
-
-'''from ethereum import utils
-from ethereum import trie
-from ethereum import securetrie
-from ethereum import blocks
-from ethereum import transactions
-from ethereum import processblock
-from ethereum import tester
-from ethereum import abi
-from ethereum import keys
-from ethereum import ethash'''
