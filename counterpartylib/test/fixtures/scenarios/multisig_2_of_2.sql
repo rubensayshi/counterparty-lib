@@ -903,6 +903,52 @@ CREATE INDEX give_get_status_idx ON orders (get_asset, give_asset, status);
 CREATE INDEX give_status_idx ON orders (give_asset, status);
 CREATE INDEX source_give_status_idx ON orders (source, give_asset, status);
 
+-- Table  poll_votes
+DROP TABLE IF EXISTS poll_votes;
+CREATE TABLE poll_votes(
+                      tx_index INTEGER PRIMARY KEY,
+                      tx_hash TEXT UNIQUE,
+                      block_index INTEGER,
+                      source TEXT,
+                      votename TEXT,
+                      option TEXT,
+                      vote INTEGER UNSIGNED,
+                      FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index));
+-- Triggers and indices on  poll_votes
+CREATE TRIGGER _poll_votes_delete BEFORE DELETE ON poll_votes BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'INSERT INTO poll_votes(rowid,tx_index,tx_hash,block_index,source,votename,option,vote) VALUES('||old.rowid||','||quote(old.tx_index)||','||quote(old.tx_hash)||','||quote(old.block_index)||','||quote(old.source)||','||quote(old.votename)||','||quote(old.option)||','||quote(old.vote)||')');
+                            END;
+CREATE TRIGGER _poll_votes_insert AFTER INSERT ON poll_votes BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'DELETE FROM poll_votes WHERE rowid='||new.rowid);
+                            END;
+CREATE TRIGGER _poll_votes_update AFTER UPDATE ON poll_votes BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'UPDATE poll_votes SET tx_index='||quote(old.tx_index)||',tx_hash='||quote(old.tx_hash)||',block_index='||quote(old.block_index)||',source='||quote(old.source)||',votename='||quote(old.votename)||',option='||quote(old.option)||',vote='||quote(old.vote)||' WHERE rowid='||old.rowid);
+                            END;
+
+-- Table  polls
+DROP TABLE IF EXISTS polls;
+CREATE TABLE polls(
+                      tx_index INTEGER PRIMARY KEY,
+                      tx_hash TEXT UNIQUE,
+                      block_index INTEGER,
+                      source TEXT,
+                      votename TEXT,
+                      asset TEXT,
+                      duration INTEGER,
+                      options TEXT,
+                      holders TEXT,
+                      FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index));
+-- Triggers and indices on  polls
+CREATE TRIGGER _polls_delete BEFORE DELETE ON polls BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'INSERT INTO polls(rowid,tx_index,tx_hash,block_index,source,votename,asset,duration,options,holders) VALUES('||old.rowid||','||quote(old.tx_index)||','||quote(old.tx_hash)||','||quote(old.block_index)||','||quote(old.source)||','||quote(old.votename)||','||quote(old.asset)||','||quote(old.duration)||','||quote(old.options)||','||quote(old.holders)||')');
+                            END;
+CREATE TRIGGER _polls_insert AFTER INSERT ON polls BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'DELETE FROM polls WHERE rowid='||new.rowid);
+                            END;
+CREATE TRIGGER _polls_update AFTER UPDATE ON polls BEGIN
+                            INSERT INTO undolog VALUES(NULL, 'UPDATE polls SET tx_index='||quote(old.tx_index)||',tx_hash='||quote(old.tx_hash)||',block_index='||quote(old.block_index)||',source='||quote(old.source)||',votename='||quote(old.votename)||',asset='||quote(old.asset)||',duration='||quote(old.duration)||',options='||quote(old.options)||',holders='||quote(old.holders)||' WHERE rowid='||old.rowid);
+                            END;
+
 -- Table  postqueue
 DROP TABLE IF EXISTS postqueue;
 CREATE TABLE postqueue(

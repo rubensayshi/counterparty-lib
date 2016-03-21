@@ -756,4 +756,30 @@ def clean_url_for_log(url):
 
     return url
 
+
+def str_is_bool(s):
+    if isinstance(s, bool):
+        return True
+    elif isinstance(s, int):
+        return s == 0 or s == 1
+    else:
+        return str(s).lower() in ['true', 'false', '1', '0']
+
+
+def str_to_bool(s):
+    if isinstance(s, bool):
+        return s
+    elif isinstance(s, int):
+        return s != 0
+    else:
+        assert str_is_bool(s), "str is not bool"
+        return str(s).lower() in ['true', '1']
+
+
+def bool_to_str(b):
+    b = str_to_bool(b)
+
+    return "TRUE" if b else "FALSE"
+
+
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4

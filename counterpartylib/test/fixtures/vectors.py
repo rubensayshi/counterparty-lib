@@ -48,6 +48,90 @@ UNITTEST_VECTOR = {
             }
         ]
     },
+
+    'messages.broadcasts.polls.initvote': {
+        'compose': [{
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', '1YEAR', ['TRUE', 'FALSE']),
+            'error': (exceptions.ComposeError, "['invalid format']")
+        }, {
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', 1000, ['TRUE', 'FALSE']),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE')
+        }, {
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', 1000, ['TRUE', 'FALSE'], DP['default_block_index'] - 500),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE')
+        }],
+        'validate': [{
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL'.split(' '), DP['default_block_index']),
+            'out': (['invalid format'])
+        }, {
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1YEAR OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'out': (['invalid format'])
+        }, {
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000'.split(' '), DP['default_block_index']),
+            'out': (['invalid format'])
+        }, {
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'out': ([])
+        }, {
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'out': ([])
+        }, {
+            'in': ('TESTSCENARIOPOLL', 'INITVOTE TESTSCENARIOPOLL XCP 1000 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'out': (['poll with votename TESTSCENARIOPOLL already exists'])
+        }],
+    },
+    'messages.broadcasts.polls.castvote': {
+        'compose': [{
+            'in': (ADDR[1], 'TESTSCENARIOPOLL', 'TRUE', 'NOOOOO'),
+            'error': (exceptions.ComposeError, "['invalid format']")
+        }, {
+            'in': (ADDR[1], 'TESTPOLL', 'FALSE', 20),
+            'error': (exceptions.ComposeError, "['no poll with votename TESTPOLL exists']")
+        }, {
+            'in': (ADDR[1], 'TESTSCENARIOPOLL', 'TRUE', 100),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'CASTVOTE TESTSCENARIOPOLL TRUE 100')
+        }, {
+            'in': (ADDR[1], 'TESTSCENARIOPOLL', 'TRUE', 10),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'CASTVOTE TESTSCENARIOPOLL TRUE 10')
+        }, {
+            'in': (ADDR[1], 'TESTSCENARIOPOLL', 'FALSE', 50),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'CASTVOTE TESTSCENARIOPOLL FALSE 50')
+        }, {
+            'in': (ADDR[1], 'TESTSCENARIOPOLL', 'FALSE', 20),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'CASTVOTE TESTSCENARIOPOLL FALSE 20')
+        }],
+        'validate': [{
+            'in': (ADDR[0], 'TESTPOLL', 'CASTVOTE TESTPOLL TRUE 100'.split(' '), DP['default_block_index']),
+            'out': (['no poll with votename TESTPOLL exists'])
+        }, {
+            'in': (ADDR[0], 'TESTSCENARIOPOLL', 'CASTVOTE TESTSCENARIOPOLL'.split(' '), DP['default_block_index']),
+            'out': (['invalid format'])
+        }, {
+            'in': (ADDR[0], 'TESTSCENARIOPOLL', 'CASTVOTE TESTSCENARIOPOLL NO 100'.split(' '), DP['default_block_index']),
+            'out': (['option \'NO\' not in list of possible options; ["TRUE", "FALSE"]'])
+        }, {
+            'in': (ADDR[0], 'TESTSCENARIOPOLL', 'CASTVOTE TESTSCENARIOPOLL TRUE NO'.split(' '), DP['default_block_index']),
+            'out': (['invalid format'])
+        # }, {
+        #     'in': (ADDR[3], 'TESTSCENARIOPOLL', 'CASTVOTE TESTSCENARIOPOLL TRUE 100'.split(' '), DP['default_block_index']),
+        #     'out': (['source mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj did not have a stake in asset when vote was initiated'])
+        }, {
+            'in': (ADDR[0], 'TESTSCENARIOPOLL', 'CASTVOTE TESTSCENARIOPOLL TRUE 100'.split(' '), DP['default_block_index']),
+            'out': ([])
+        }],
+    },
+    'messages.broadcasts.polls': {
+        'validate': [{
+            'in': ('INITVOTE TESTPOLL', DP['default_block_index']),
+            'out': ([])
+        }, {
+            'in': ('CASTVOTE TESTPOLL', DP['default_block_index']),
+            'out': ([])
+        }, {
+            'in': ('NOTVALIDCMD TESTPOLL', DP['default_block_index']),
+            'out': (['not a poll'])
+        }],
+    },
     'bet': {
         'validate': [{
             'in': (ADDR[1], ADDR[0], 0, 1488000100, DP['small'], DP['small'], 0.0, 15120, DP['expiration'], DP['default_block_index']),
@@ -563,6 +647,22 @@ UNITTEST_VECTOR = {
         }, {
             'in': (ADDR[0], 1588000000, 1, DP['fee_multiplier'], 'Over 52 characters test test test test test test test test'),
             'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00?\xf0\x00\x00\x00\x00\x00\x00\x00LK@Over 52 characters test test test test test test test test')
+        }, {
+            'comment': 'test current text packing for LOCK',
+            'in': (ADDR[0], 1388000100, 50000000, 0, 'LOCK'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1eR\xbb3dA\x87\xd7\x84\x00\x00\x00\x00\x00\x00\x00\x00\x04LOCK')
+        }, {
+            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE')
+        }, {
+            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x001INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE')
+        }, {
+            'in': (ADDR[0], 1588000000, 0, 0, 'CASTVOTE TESTSCENARIOPOLL TRUE 100'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"CASTVOTE TESTSCENARIOPOLL TRUE 100')
+        }, {
+            'in': (ADDR[0], 1588000000, 0, 0, 'CASTVOTE TESTSCENARIOPOLL FALSE 50'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"CASTVOTE TESTSCENARIOPOLL FALSE 50')
         }],
         'parse': [{
             'in': ({'destination': '', 'block_index': DP['default_block_index'], 'supported': 1, 'data': b'\x00\x00\x00\x1eR\xbb3dA\x87\xd7\x84\x00\x00\x00\x00\x00\x00\x00\x00\x06BARFOO', 'fee': 10000, 'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58', 'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
@@ -673,7 +773,127 @@ UNITTEST_VECTOR = {
                     'tx_index': 502,
                     'value': None,
                 }}
-        ]
+            ]
+        }, {
+            'comment': 'initvote',
+            'in': ({'destination': '',
+                    'block_index': 310501,
+                    'supported': 1,
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE',
+                    'fee': 10000,
+                    'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
+                    'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
+            'records': [
+                {'table': 'broadcasts', 'values': {
+                    'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
+                    'text': 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE',
+                    'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
+                }},
+                {'table': 'polls', 'values': {
+                    'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'duration': 1000, 'votename': 'TESTPOLL', 'asset': 'XCP',
+                    'options': json.dumps(['TRUE', 'FALSE']),
+                    'holders_block_index': DP['default_block_index'],
+                    'block_index': DP['default_block_index'], 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
+                }},
+            ]
+        }, {
+            'comment': 'initvote with stakeheight',
+            'in': ({'destination': '',
+                    'block_index': 310501,
+                    'supported': 1,
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x001INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE',
+                    'fee': 10000,
+                    'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
+                    'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
+            'records': [
+                {'table': 'broadcasts', 'values': {
+                    'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
+                    'text': 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE',
+                    'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
+                }},
+                {'table': 'polls', 'values': {
+                    'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'duration': 1000, 'votename': 'TESTPOLL', 'asset': 'XCP',
+                    'options': json.dumps(['TRUE', 'FALSE']),
+                    'stake_block_index': 310001,
+                    'block_index': DP['default_block_index'], 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
+                }},
+            ]
+        }, {
+            'comment': '100% TRUE vote',
+            'in': ({'destination': '',
+                    'block_index': 310501,
+                    'supported': 1,
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"CASTVOTE TESTSCENARIOPOLL TRUE 100',
+                    'fee': 10000,
+                    'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
+                    'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
+            'records': [
+                {'table': 'broadcasts', 'values': {
+                    'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
+                    'text': 'CASTVOTE TESTSCENARIOPOLL TRUE 100',
+                    'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
+                }},
+                {'table': 'poll_votes', 'values': {
+                    'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'votename': 'TESTSCENARIOPOLL', 'option': 'TRUE', 'vote': 100,
+                    'block_index': 310501, 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
+                }},
+            ]
+        }, {
+            'comment': '50% FALSE vote',
+            'in': ({'destination': '',
+                    'block_index': 310501,
+                    'supported': 1,
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"CASTVOTE TESTSCENARIOPOLL FALSE 50',
+                    'fee': 10000,
+                    'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
+                    'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
+            'records': [
+                {'table': 'broadcasts', 'values': {
+                    'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
+                    'text': 'CASTVOTE TESTSCENARIOPOLL FALSE 50',
+                    'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
+                }},
+                {'table': 'poll_votes', 'values': {
+                    'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'votename': 'TESTSCENARIOPOLL', 'option': 'FALSE', 'vote': 50,
+                    'block_index': 310501, 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
+                }},
+            ]
+        }, {
+            'comment': 'vote for unknown poll',
+            'in': ({'destination': '',
+                    'block_index': 310501,
+                    'supported': 1,
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1aCASTVOTE TESTPOLL FALSE 50',
+                    'fee': 10000,
+                    'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
+                    'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'},),
+            'records': [
+                {'table': 'broadcasts', 'values': {
+                    'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
+                    'text': 'CASTVOTE TESTPOLL FALSE 50',
+                    'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
+                }},
+                # TYPE: NOT
+                {'table': 'poll_votes', 'not': True, 'values': {
+                    'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
+                    'votename': 'TESTPOLL', 'option': 'FALSE', 'vote': 50,
+                    'block_index': 310501,
+                }},
+            ]
         }],
     },
     'burn': {
@@ -2790,6 +3010,41 @@ UNITTEST_VECTOR = {
         }]
     },
     'util': {
+        'str_is_bool': [
+            {'in': ('NO',), 'out': False},
+            {'in': ('FALSY',), 'out': False},
+            {'in': ('True',), 'out': True},
+            {'in': ('TruE',), 'out': True},
+            {'in': ('False',), 'out': True},
+            {'in': ('0',), 'out': True},
+            {'in': ('1',), 'out': True},
+            {'in': (0,), 'out': True},
+            {'in': (1,), 'out': True},
+        ],
+        'str_to_bool': [
+            {'in': ('NO',), 'error': (AssertionError, "str is not bool")},
+            {'in': ('FALSY',), 'error': (AssertionError, "str is not bool")},
+            {'in': ('True',), 'out': True},
+            {'in': ('TruE',), 'out': True},
+            {'in': ('False',), 'out': False},
+            {'in': ('0',), 'out': False},
+            {'in': ('1',), 'out': True},
+            {'in': (0,), 'out': False},
+            {'in': (1,), 'out': True},
+        ],
+        'bool_to_str': [
+            {'in': ('NO',), 'error': (AssertionError, "str is not bool")},
+            {'in': ('FALSY',), 'error': (AssertionError, "str is not bool")},
+            {'in': ('True',), 'out': 'TRUE'},
+            {'in': ('TruE',), 'out': 'TRUE'},
+            {'in': ('False',), 'out': 'FALSE'},
+            {'in': ('0',), 'out': 'FALSE'},
+            {'in': ('1',), 'out': 'TRUE'},
+            {'in': (0,), 'out': 'FALSE'},
+            {'in': (1,), 'out': 'TRUE'},
+            {'in': (False,), 'out': 'FALSE'},
+            {'in': (True,), 'out': 'TRUE'},
+        ],
         'api': [{
             'in': ('create_burn', {'source': ADDR[1], 'quantity': DP['burn_quantity'], 'encoding': 'multisig'}),
             'out': '0100000001ebe3111881a8733ace02271dcf606b7450c41a48c1cb21fd73f4ba787b353ce4000000001976a9148d6ae8a3b381663118b4e1eff4cfc7d0954dd6ec88acffffffff02800bb203000000001976a914a11b66a67b3ff69671c8f82254099faf374b800e88ac70ae4302000000001976a9148d6ae8a3b381663118b4e1eff4cfc7d0954dd6ec88ac00000000'

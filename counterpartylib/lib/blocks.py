@@ -32,6 +32,7 @@ from counterpartylib.lib import backend
 from counterpartylib.lib import log
 from counterpartylib.lib import database
 from .messages import (send, order, btcpay, issuance, broadcast, bet, dividend, burn, cancel, rps, rpsresolve, publish, execute, destroy)
+from .messages.broadcasts import polls
 
 from .kickstart.blocks_parser import BlockchainParser, ChainstateParser
 from .kickstart.utils import ib2h
@@ -42,7 +43,7 @@ from .exceptions import DecodeError, BTCOnlyError
 TABLES = ['credits', 'debits', 'messages'] + \
          ['bet_match_resolutions', 'order_match_expirations', 'order_matches',
          'order_expirations', 'orders', 'bet_match_expirations', 'bet_matches',
-         'bet_expirations', 'bets', 'broadcasts', 'btcpays', 'burns',
+         'bet_expirations', 'bets', 'broadcasts', 'polls', 'poll_votes', 'btcpays', 'burns',
          'cancels', 'dividends', 'issuances', 'sends',
          'rps_match_expirations', 'rps_expirations', 'rpsresolves',
          'rps_matches', 'rps', 'executions', 'storage', 'suicides', 'nonces',
@@ -346,6 +347,7 @@ def initialise(db):
     btcpay.initialise(db)
     issuance.initialise(db)
     broadcast.initialise(db)
+    polls.initialise(db)
     bet.initialise(db)
     publish.initialise(db)
     execute.initialise(db)
