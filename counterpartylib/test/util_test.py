@@ -317,12 +317,14 @@ def check_record(record, server_db):
         sql += " AND ".join(conditions)
 
         count = list(cursor.execute(sql, tuple(bindings)))[0]['c']
-        if count != 1:
+
+        if (record.get('not', False) and count != 0) or (not record.get('not', False) and count != 1):
             if pytest.config.option.verbosediff:
                 pprint.PrettyPrinter(indent=4).pprint(record['values'])
                 pprint.PrettyPrinter(indent=4).pprint(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
 
             raise AssertionError("check_record \n" +
+                                 "not=" + record.get('not', None) + " \n" +
                                  "table=" + record['table'] + " \n" +
                                  "condiitions=" + ",".join(conditions) + " \n" +
                                  "bindings=" + ",".join(map(lambda v: str(v), bindings)))
@@ -396,11 +398,18 @@ def check_outputs(tx_name, method, inputs, outputs, error, records, comment, moc
             else:
                 msg = "expected outputs don't match test_outputs: outputs=%s test_outputs=%s" % (outputs, test_outputs)
             raise Exception(msg)
+
     if error is not None:
         assert str(exception.value) == error[1]
+
     if records is not None:
-        for record in records:
-            check_record(record, server_db)
+        try:
+            for record in records:
+                check_record(record, server_db)
+        except AssertionError as e:
+            if pytest.config.option.verbosediff:
+                print("test_outputs=\n" + pprint.pformat(test_outputs))
+            raise e
 
 def compare_strings(string1, string2):
     """Compare strings diff-style."""
