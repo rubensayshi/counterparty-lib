@@ -933,20 +933,20 @@ CREATE TABLE polls(
                       block_index INTEGER,
                       source TEXT,
                       votename TEXT,
+                      stake_block_index INTEGER,
                       asset TEXT,
                       duration INTEGER,
                       options TEXT,
-                      holders TEXT,
                       FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index));
 -- Triggers and indices on  polls
 CREATE TRIGGER _polls_delete BEFORE DELETE ON polls BEGIN
-                            INSERT INTO undolog VALUES(NULL, 'INSERT INTO polls(rowid,tx_index,tx_hash,block_index,source,votename,asset,duration,options,holders) VALUES('||old.rowid||','||quote(old.tx_index)||','||quote(old.tx_hash)||','||quote(old.block_index)||','||quote(old.source)||','||quote(old.votename)||','||quote(old.asset)||','||quote(old.duration)||','||quote(old.options)||','||quote(old.holders)||')');
+                            INSERT INTO undolog VALUES(NULL, 'INSERT INTO polls(rowid,tx_index,tx_hash,block_index,source,votename,stake_block_index,asset,duration,options) VALUES('||old.rowid||','||quote(old.tx_index)||','||quote(old.tx_hash)||','||quote(old.block_index)||','||quote(old.source)||','||quote(old.votename)||','||quote(old.stake_block_index)||','||quote(old.asset)||','||quote(old.duration)||','||quote(old.options)||')');
                             END;
 CREATE TRIGGER _polls_insert AFTER INSERT ON polls BEGIN
                             INSERT INTO undolog VALUES(NULL, 'DELETE FROM polls WHERE rowid='||new.rowid);
                             END;
 CREATE TRIGGER _polls_update AFTER UPDATE ON polls BEGIN
-                            INSERT INTO undolog VALUES(NULL, 'UPDATE polls SET tx_index='||quote(old.tx_index)||',tx_hash='||quote(old.tx_hash)||',block_index='||quote(old.block_index)||',source='||quote(old.source)||',votename='||quote(old.votename)||',asset='||quote(old.asset)||',duration='||quote(old.duration)||',options='||quote(old.options)||',holders='||quote(old.holders)||' WHERE rowid='||old.rowid);
+                            INSERT INTO undolog VALUES(NULL, 'UPDATE polls SET tx_index='||quote(old.tx_index)||',tx_hash='||quote(old.tx_hash)||',block_index='||quote(old.block_index)||',source='||quote(old.source)||',votename='||quote(old.votename)||',stake_block_index='||quote(old.stake_block_index)||',asset='||quote(old.asset)||',duration='||quote(old.duration)||',options='||quote(old.options)||' WHERE rowid='||old.rowid);
                             END;
 
 -- Table  postqueue

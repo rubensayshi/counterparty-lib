@@ -65,11 +65,14 @@ UNITTEST_FIXTURE = [
     ['broadcast', (P2SH_ADDR[0], 1388000002, 1, DP['fee_multiplier'], 'Unit Test'), {'encoding': 'opreturn'}],
     ['bet', (P2SH_ADDR[0], P2SH_ADDR[0], 3, 1388000200, 10, 10, 0.0, 5040, 1000), {'encoding': 'opreturn'}],
 
+    ['broadcast', (ADDR[4], 1388000000, -3, 0, 'INITVOTE TESTSCENARIOPOLL XCP 1000 OPTS TRUE FALSE'), {'encoding': 'multisig'}],
+    ['broadcast', (ADDR[4], 1388000001, -3, 0, 'CASTVOTE TESTSCENARIOPOLL TRUE 70'), {'encoding': 'multisig'}],
+
     ['create_next_block', 485],
 
-    ['broadcast', (ADDR[4], 1388000000, 1, DP['fee_multiplier'], 'Unit Test'), {'encoding': 'multisig'}],
-    ['bet', (ADDR[4], ADDR[4], 1, 1388000001, 9, 9, 0.0, 5040, 100), {'encoding': 'multisig'}],
-    ['broadcast', (ADDR[4], 1388000002, 1, 0.0, 'lock'), {'encoding': 'multisig'}],
+    ['broadcast', (ADDR[4], 1388000100, 1, DP['fee_multiplier'], 'Unit Test'), {'encoding': 'multisig'}],
+    ['bet', (ADDR[4], ADDR[4], 1, 1388000101, 9, 9, 0.0, 5040, 100), {'encoding': 'multisig'}],
+    ['broadcast', (ADDR[4], 1388000102, 1, 0.0, 'lock'), {'encoding': 'multisig'}],
 
     ['create_next_block', 490],
 

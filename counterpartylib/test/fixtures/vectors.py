@@ -795,7 +795,7 @@ UNITTEST_VECTOR = {
                     'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
                     'duration': 1000, 'votename': 'TESTPOLL', 'asset': 'XCP',
                     'options': json.dumps(['TRUE', 'FALSE']),
-                    'holders_block_index': DP['default_block_index'],
+                    'stake_block_index': DP['default_block_index'],
                     'block_index': DP['default_block_index'], 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
                 }},
             ]
@@ -3182,11 +3182,11 @@ UNITTEST_VECTOR = {
                             '"valid", "tx_hash": '
                             '"54f4c7b383ea19147e62d2be9f3e7f70b6c379baac15e8b4cf43f7c21578c1ef", '
                             '"tx_index": 497}',
-                    'block_index': 310496,
-                    'category': 'sends',
-                    'command': 'insert',
-                    'message_index': 100,
-                    'timestamp': 0}
+                'block_index': 310496,
+                'category': 'sends',
+                'command': 'insert',
+                'message_index': 91,
+                'timestamp': 0}
         }],
         'get_asset_id': [{
             'in': ('XCP', DP['default_block_index']),
