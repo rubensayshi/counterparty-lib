@@ -176,7 +176,8 @@ def parse (db, tx, message):
     if util.enabled('broadcast_invalid_check') and status != 'valid':
         return
 
-    polls.parse(db, tx, text, util.CURRENT_BLOCK_INDEX)
+    if config.BROADCAST_PARSE_POLLS:
+        polls.parse(db, tx, text, util.CURRENT_BLOCK_INDEX)
 
     # Negative values (default to ignore).
     if value is None or value < 0:
