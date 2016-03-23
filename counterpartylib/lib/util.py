@@ -395,59 +395,127 @@ def value_out(db, quantity, asset, divisible=None):
     return value_output(quantity, asset, divisible)
 
 ### SUPPLIES ###
+def asset_balances_at_height(db, asset, block_index):
+    cursor = db.cursor()
+    cursor.execute('''
+SELECT address, SUM(credits_sum) -SUM(debits_sum) AS quantity FROM (
+	SELECT
+		address,
+		SUM(quantity) AS debits_sum,
+		0 AS credits_sum
+	FROM debits
+	WHERE asset = ?
+	AND block_index <= ?
+	GROUP BY address
 
-def holders(db, asset):
-    """Return holders of the asset."""
+	UNION
+
+	SELECT
+		address,
+		0 AS debits_sum,
+		SUM(quantity) AS credits_sum
+	FROM credits
+	WHERE asset = ?
+	AND block_index <= ?
+	GROUP BY address
+)
+GROUP BY address
+    ''', (asset, block_index, asset, block_index))
+    balances = cursor.fetchall()
+    cursor.close()
+
+    return list(balances)
+
+def holders(db, asset, block_index=None):
+    """
+    Return holders of the asset.
+
+    :param db:
+    :param asset:
+    :param block_index: when result will be the state at that block height (<= block_index)
+                         using this can be SLOW for assets with a lot of holders / a lot of history
+                         because it uses the credits/debits table instead of balances
+    :return:
+    """
+
     holders = []
     cursor = db.cursor()
     # Balances
-    cursor.execute('''SELECT * FROM balances \
+
+    # when no block_index we can use the balances table
+    if block_index is None:
+        cursor.execute('''SELECT * FROM balances \
                       WHERE asset = ?''', (asset,))
-    for balance in list(cursor):
-        holders.append({'address': balance['address'], 'address_quantity': balance['quantity'], 'escrow': None})
+        for balance in list(cursor):
+            holders.append({'address': balance['address'], 'address_quantity': balance['quantity'], 'escrow': None})
+
+    # otherwise we need to use asset_balances_at_height which uses a sum of credits and debits
+    else:
+        for balance in asset_balances_at_height(db, asset, block_index):
+            holders.append({'address': balance['address'], 'address_quantity': balance['quantity'], 'escrow': None})
+
+    def maybe_add_block_index(sql, args, block_index):
+        """
+        small helper to add ' AND block_index <= ?' to the sql when block_index is not None
+
+        :param sql:
+        :param args:
+        :param block_index:
+        :return:
+        """
+        if block_index is None:
+            return sql, args
+        else:
+            sql += " AND block_index <= ?"
+            args += (block_index, )
+            return sql, args
+
     # Funds escrowed in orders. (Protocol change.)
-    cursor.execute('''SELECT * FROM orders \
-                      WHERE give_asset = ? AND status = ?''', (asset, 'open'))
+    cursor.execute(*maybe_add_block_index('''SELECT * FROM orders \
+                      WHERE give_asset = ? AND status = ?''', (asset, 'open'), block_index))
     for order in list(cursor):
         holders.append({'address': order['source'], 'address_quantity': order['give_remaining'], 'escrow': order['tx_hash']})
+
     # Funds escrowed in pending order matches. (Protocol change.)
-    cursor.execute('''SELECT * FROM order_matches \
-                      WHERE (forward_asset = ? AND status = ?)''', (asset, 'pending'))
+    cursor.execute(*maybe_add_block_index('''SELECT * FROM order_matches \
+                      WHERE (forward_asset = ? AND status = ?)''', (asset, 'pending'), block_index))
     for order_match in list(cursor):
         holders.append({'address': order_match['tx0_address'], 'address_quantity': order_match['forward_quantity'], 'escrow': order_match['id']})
-    cursor.execute('''SELECT * FROM order_matches \
-                      WHERE (backward_asset = ? AND status = ?)''', (asset, 'pending'))
+
+    cursor.execute(*maybe_add_block_index('''SELECT * FROM order_matches \
+                      WHERE (backward_asset = ? AND status = ?)''', (asset, 'pending'), block_index))
     for order_match in list(cursor):
         holders.append({'address': order_match['tx1_address'], 'address_quantity': order_match['backward_quantity'], 'escrow': order_match['id']})
 
     # Bets and RPS (and bet/rps matches) only escrow XCP.
     if asset == config.XCP:
-        cursor.execute('''SELECT * FROM bets \
-                          WHERE status = ?''', ('open',))
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM bets \
+                          WHERE status = ?''', ('open',), block_index))
         for bet in list(cursor):
             holders.append({'address': bet['source'], 'address_quantity': bet['wager_remaining'], 'escrow': bet['tx_hash']})
-        cursor.execute('''SELECT * FROM bet_matches \
-                          WHERE status = ?''', ('pending',))
+
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM bet_matches \
+                          WHERE status = ?''', ('pending',), block_index))
         for bet_match in list(cursor):
             holders.append({'address': bet_match['tx0_address'], 'address_quantity': bet_match['forward_quantity'], 'escrow': bet_match['id']})
             holders.append({'address': bet_match['tx1_address'], 'address_quantity': bet_match['backward_quantity'], 'escrow': bet_match['id']})
 
-        cursor.execute('''SELECT * FROM rps \
-                          WHERE status = ?''', ('open',))
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM rps \
+                          WHERE status = ?''', ('open',), block_index))
         for rps in list(cursor):
             holders.append({'address': rps['source'], 'address_quantity': rps['wager'], 'escrow': rps['tx_hash']})
-        cursor.execute('''SELECT * FROM rps_matches \
-                          WHERE status IN (?, ?, ?)''', ('pending', 'pending and resolved', 'resolved and pending'))
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM rps_matches \
+                          WHERE status IN (?, ?, ?)''', ('pending', 'pending and resolved', 'resolved and pending'), block_index))
         for rps_match in list(cursor):
             holders.append({'address': rps_match['tx0_address'], 'address_quantity': rps_match['wager'], 'escrow': rps_match['id']})
             holders.append({'address': rps_match['tx1_address'], 'address_quantity': rps_match['wager'], 'escrow': rps_match['id']})
 
-        cursor.execute('''SELECT * FROM executions WHERE status IN (?,?)''', ('valid','out of gas'))
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM executions WHERE status IN (?,?)''', ('valid', 'out of gas'), block_index))
         for execution in list(cursor):
             holders.append({'address': execution['source'], 'address_quantity': execution['gas_cost'], 'escrow': None})
 
         # XCP escrowed for not finished executions
-        cursor.execute('''SELECT * FROM executions WHERE status = ?''', ('out of gas',))
+        cursor.execute(*maybe_add_block_index('''SELECT * FROM executions WHERE status = ?''', ('out of gas',), block_index))
         for execution in list(cursor):
             holders.append({'address': execution['source'], 'address_quantity': execution['gas_remained'], 'escrow': execution['contract_id']})
 
