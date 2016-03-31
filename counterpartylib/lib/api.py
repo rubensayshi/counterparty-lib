@@ -514,8 +514,7 @@ class APIServer(threading.Thread):
                 where.append('asset = ?')
                 args.append(asset)
             if active is True:
-                where.append('block_index + duration >= ?')
-                args.append(util.CURRENT_BLOCK_INDEX)
+                where.append('status = "open"')
             if votename_match is not None:
                 where.append('votename LIKE ?')
                 args.append('%' + votename_match + '%')
@@ -567,10 +566,15 @@ class APIServer(threading.Thread):
             return result
 
         @dispatcher.add_method
-        def create_poll(votename, asset, duration, options, **kwargs):
+        def create_poll(votename, asset, options, deadline=None, duration=None, **kwargs):
             options = [option.strip() for option in options.split(",")]
+            assert deadline or duration, "need deadline or duration"
+            assert not (deadline and duration), "can't have deadline and duration"
 
-            source, problems, text = initvote.compose(db, kwargs['source'], votename, asset, duration, options)
+            if duration:
+                deadline = util.CURRENT_BLOCK_INDEX + int(duration)
+
+            source, problems, text = initvote.compose(db, kwargs['source'], votename, asset, deadline, options)
 
             transaction_args, common_args, private_key_wif = split_params(**kwargs)
             transaction_args['text'] = text

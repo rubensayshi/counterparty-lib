@@ -9,6 +9,7 @@ from counterpartylib.lib import util
 
 CASTVOTE = "CASTVOTE"
 
+from . import STATUS_CLOSED, STATUS_OPEN
 
 def validate(db, source, votename, s, block_index):
     problems = []
@@ -18,7 +19,7 @@ def validate(db, source, votename, s, block_index):
         vote = s[3]
         vote = int(vote)
 
-        assert str(int(vote)) == str(vote), "duration is int"
+        assert str(int(vote)) == str(vote), "vote is int"
 
     except:
         return ["invalid format"]
@@ -33,19 +34,8 @@ def validate(db, source, votename, s, block_index):
         poll = poll[0]
         options = json.loads(poll['options'])
 
-        # check that duration hasn't been reached
-        if block_index > poll['stake_block_index'] + poll['duration']:
-            problems.append("poll has reached it's duration")
-
-        # check that source had a stake when vote was initiated
-        # has_stake = False
-        # for holder in holders:
-        #     if holder['address'] == source:
-        #         has_stake = True
-        #         break
-        #
-        # if not has_stake:
-        #     problems.append("source %s did not have a stake in asset when vote was initiated" % source)
+        if poll['status'] == STATUS_CLOSED:
+            problems.append("poll has reached it's deadline")
 
         # check option matches options of the poll
         if option not in options:
@@ -88,6 +78,8 @@ def parse(db, tx, votename, s):
     option = s[2]
     vote = s[3]
     vote = int(vote)
+
+    logger.warn('parse::problems: ' + ", ".join(problems))
 
     if len(problems) > 0:
         return problems

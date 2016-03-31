@@ -4,11 +4,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+STATUS_OPEN = 'open'
+STATUS_CLOSED = 'closed'
+
 from counterpartylib.lib.messages.broadcasts.polls import initvote, castvote
 
-# import constants so they can be used externally as counterpartylib.lib.messages.polls.INITVOTE/CASTVOTE
-from counterpartylib.lib.messages.broadcasts.polls.initvote import MAX_DURATION, INITVOTE
+# import constants so they can be used externally as counterpartylib.lib.messages.polls.INITVOTE/CASTVOTE, etc
+from counterpartylib.lib.messages.broadcasts.polls.initvote import MAX_DEADLINE_BLOCKS, MAX_DEADLINE_TIMESTAMP, DEADLINE_TIMESTAMP_THRESHOLD, INITVOTE
 from counterpartylib.lib.messages.broadcasts.polls.castvote import CASTVOTE
+
 
 
 def initialise(db):
@@ -21,7 +25,9 @@ def initialise(db):
                       votename TEXT,
                       stake_block_index INTEGER,
                       asset TEXT,
-                      duration INTEGER,
+                      deadline_ts INTEGER,
+                      deadline_block_index INTEGER,
+                      status TEXT,
                       options TEXT,
                       FOREIGN KEY (tx_index, tx_hash, block_index) REFERENCES transactions(tx_index, tx_hash, block_index))
                    ''')
@@ -68,5 +74,17 @@ def parse(db, tx, message, block_index):
         return initvote.parse(db, tx, votename, s)
     elif cmd == CASTVOTE:
         return castvote.parse(db, tx, votename, s)
+
+
+def update_status(db, block_index, block_time):
+    cursor = db.cursor()
+
+    polls = list(cursor.execute('''SELECT * FROM polls WHERE status = ?''', (STATUS_OPEN, )))
+
+    for poll in polls:
+        if (poll['deadline_ts'] and block_time >= poll['deadline_ts']) or (poll['deadline_block_index'] and block_index >= poll['deadline_block_index']):
+            cursor.execute('''UPDATE polls SET status = ? WHERE votename = ?''', (STATUS_CLOSED, poll['votename']))
+
+    cursor.close()
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4

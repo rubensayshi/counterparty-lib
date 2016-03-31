@@ -22,6 +22,7 @@ from counterpartylib.lib.messages.scriptlib.processblock import ContractError
 from counterpartylib.lib.api import APIError
 from counterpartylib.lib.util import (DebitError, CreditError, QuantityError)
 from fractions import Fraction
+from counterpartylib.test.util_test import mock_block_time
 
 UNITTEST_VECTOR = {
     'backend': {
@@ -54,11 +55,24 @@ UNITTEST_VECTOR = {
             'in': (ADDR[1], 'TESTPOLL', 'XCP', '1YEAR', ['TRUE', 'FALSE']),
             'error': (exceptions.ComposeError, "['invalid format']")
         }, {
-            'in': (ADDR[1], 'TESTPOLL', 'XCP', 1000, ['TRUE', 'FALSE']),
-            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE')
+            'comment': "can't set deadline to current block index or lower",
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', DP['default_block_index'] - 1, ['TRUE', 'FALSE']),
+            'error': (exceptions.ComposeError, "['deadline before current block index']")
         }, {
-            'in': (ADDR[1], 'TESTPOLL', 'XCP', 1000, ['TRUE', 'FALSE'], DP['default_block_index'] - 500),
-            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE')
+            'comment': "can't set deadline to current block timestamp or lower",
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', mock_block_time(DP['default_block_index'] - 1), ['TRUE', 'FALSE']),
+            'error': (exceptions.ComposeError, "['deadline before current block time']")
+        }, {
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', DP['default_block_index'] + 1000, ['TRUE', 'FALSE']),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE')
+        }, {
+            'comment': 'set stake height',
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', DP['default_block_index'] + 1000, ['TRUE', 'FALSE'], DP['default_block_index'] - 500),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE')
+        }, {
+            'comment': "can set deadline to block timestamp in the future",
+            'in': (ADDR[1], 'TESTPOLL', 'XCP', mock_block_time(DP['default_block_index'] + 100), ['TRUE', 'FALSE'], DP['default_block_index'] - 500),
+            'out': ('mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns', [], 'INITVOTE TESTPOLL XCP 1419760100 310001 OPTS TRUE FALSE')
         }],
         'validate': [{
             'in': ('TESTPOLL', 'INITVOTE TESTPOLL'.split(' '), DP['default_block_index']),
@@ -67,16 +81,16 @@ UNITTEST_VECTOR = {
             'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1YEAR OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
             'out': (['invalid format'])
         }, {
-            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000'.split(' '), DP['default_block_index']),
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 311501'.split(' '), DP['default_block_index']),
             'out': (['invalid format'])
         }, {
-            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
             'out': ([])
         }, {
-            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'in': ('TESTPOLL', 'INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
             'out': ([])
         }, {
-            'in': ('TESTSCENARIOPOLL', 'INITVOTE TESTSCENARIOPOLL XCP 1000 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
+            'in': ('TESTSCENARIOPOLL', 'INITVOTE TESTSCENARIOPOLL XCP 311501 OPTS TRUE FALSE'.split(' '), DP['default_block_index']),
             'out': (['poll with votename TESTSCENARIOPOLL already exists'])
         }],
     },
@@ -652,11 +666,11 @@ UNITTEST_VECTOR = {
             'in': (ADDR[0], 1388000100, 50000000, 0, 'LOCK'),
             'out': (ADDR[0], [], b'\x00\x00\x00\x1eR\xbb3dA\x87\xd7\x84\x00\x00\x00\x00\x00\x00\x00\x00\x04LOCK')
         }, {
-            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE'),
-            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE')
+            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00,INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE')
         }, {
-            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE'),
-            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x001INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE')
+            'in': (ADDR[0], 1588000000, 0, 0, 'INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE'),
+            'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x003INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE')
         }, {
             'in': (ADDR[0], 1588000000, 0, 0, 'CASTVOTE TESTSCENARIOPOLL TRUE 100'),
             'out': (ADDR[0], [], b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"CASTVOTE TESTSCENARIOPOLL TRUE 100')
@@ -779,7 +793,7 @@ UNITTEST_VECTOR = {
             'in': ({'destination': '',
                     'block_index': 310501,
                     'supported': 1,
-                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE',
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00,INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE',
                     'fee': 10000,
                     'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
                     'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
@@ -787,13 +801,14 @@ UNITTEST_VECTOR = {
             'records': [
                 {'table': 'broadcasts', 'values': {
                     'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
-                    'text': 'INITVOTE TESTPOLL XCP 1000 OPTS TRUE FALSE',
+                    'text': 'INITVOTE TESTPOLL XCP 311501 OPTS TRUE FALSE',
                     'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
                     'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
                 }},
                 {'table': 'polls', 'values': {
                     'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
-                    'duration': 1000, 'votename': 'TESTPOLL', 'asset': 'XCP',
+                    'status': 'open',
+                    'deadline_block_index': 311501, 'votename': 'TESTPOLL', 'asset': 'XCP',
                     'options': json.dumps(['TRUE', 'FALSE']),
                     'stake_block_index': DP['default_block_index'],
                     'block_index': DP['default_block_index'], 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
@@ -804,7 +819,7 @@ UNITTEST_VECTOR = {
             'in': ({'destination': '',
                     'block_index': 310501,
                     'supported': 1,
-                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x001INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE',
+                    'data': b'\x00\x00\x00\x1e^\xa6\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x003INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE',
                     'fee': 10000,
                     'block_hash': '46ac6d09237c7961199068fdd13f1508d755483e07c57a4c8f7ff18eb33a05c93ca6a86fa2e2af82fb77a5c337146bb37e279797a3d11970aec4693c46ea5a58',
                     'tx_index': 502, 'btc_amount': 0, 'block_time': 310501000, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
@@ -812,16 +827,17 @@ UNITTEST_VECTOR = {
             'records': [
                 {'table': 'broadcasts', 'values': {
                     'status': 'valid', 'value': 0.0, 'timestamp': 1588000000,
-                    'text': 'INITVOTE TESTPOLL XCP 1000 310001 OPTS TRUE FALSE',
+                    'text': 'INITVOTE TESTPOLL XCP 311501 310001 OPTS TRUE FALSE',
                     'fee_fraction_int': 0, 'locked': 0, 'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
                     'tx_index': 502, 'block_index': 310501, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea'
                 }},
                 {'table': 'polls', 'values': {
                     'source': 'mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns',
-                    'duration': 1000, 'votename': 'TESTPOLL', 'asset': 'XCP',
+                    'status': 'open',
+                    'deadline_block_index': 311501, 'votename': 'TESTPOLL', 'asset': 'XCP',
                     'options': json.dumps(['TRUE', 'FALSE']),
                     'stake_block_index': 310001,
-                    'block_index': DP['default_block_index'], 'tx_index': 502,  'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
+                    'block_index': DP['default_block_index'], 'tx_index': 502, 'tx_hash': 'dd48da950fd7d000224b79ebe3495fa594ca6d6698f16c4e2dc93b4f116006ea',
                 }},
             ]
         }, {

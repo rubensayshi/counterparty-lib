@@ -32,6 +32,8 @@ from counterpartylib.test.fixtures.scenarios import UNITTEST_FIXTURE, INTEGRATIO
 
 D = decimal.Decimal
 
+GENESIS_TIMESTAMP = 1388700000
+
 # Set test environment
 os.environ['TZ'] = 'EST'
 time.tzset()
@@ -123,7 +125,7 @@ def insert_block(db, block_index, parse_block=True):
     """Add blocks to the blockchain."""
     cursor = db.cursor()
     block_hash = util.dhash_string(chr(block_index))
-    block_time = block_index * 1000
+    block_time = mock_block_time(block_index)
     block = (block_index, block_hash, block_time, None, None, None, None)
     cursor.execute('''INSERT INTO blocks (block_index, block_hash, block_time, ledger_hash, txlist_hash, previous_block_hash, difficulty) 
                       VALUES (?,?,?,?,?,?,?)''', block)
@@ -133,6 +135,9 @@ def insert_block(db, block_index, parse_block=True):
     if parse_block:
         blocks.parse_block(db, block_index, block_time)
     return block_index, block_hash, block_time
+
+def mock_block_time(block_index):
+    return GENESIS_TIMESTAMP + (block_index * 100)
 
 def create_next_block(db, block_index=None, parse_block=True):
     """Create faux data for the next block."""

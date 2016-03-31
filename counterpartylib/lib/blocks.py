@@ -172,6 +172,7 @@ def parse_block(db, block_index, block_time,
     order.expire(db, block_index)
     bet.expire(db, block_index, block_time)
     rps.expire(db, block_index)
+    polls.update_status(db, block_index, block_time)
 
     # Parse transactions, sorting them by type.
     cursor = db.cursor()
