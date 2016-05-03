@@ -425,7 +425,7 @@ def main(datafeed, index):
         c = self.datafeed.get(self.index)
         othervalue = ethvalue * c
         self.fiatValue = othervalue
-        self.maturity = block.timestamp + 500
+        self.maturity = block.timestamp + 20000
         return(othervalue)
     else:
         othervalue = self.fiatValue
@@ -442,35 +442,45 @@ def main(datafeed, index):
 '''
 
 
-@pytest.mark.skip('SNAPSHOT')
 def test_hedge():
+    # run previous test to setup data feeds
     s, c = test_data_feeds()
+
+    # create contract
     c2 = s.abi_contract(hedge_code, sender=tester.k0)
-    # Have the first party register, sending 10000000 XCPtoshi and
-    # asking for a hedge using currency code 500
+
+    # Have the first party register, sending 10000000 XCPtoshi and asking for a hedge using currency code 500
     o1 = c2.main(c.address.int(), 500, value=10000000, sender=tester.k0)
     assert o1 == 1
-    # Have the second party register. It should receive the
-    # amount of units of the second currency that it is
-    # entitled to. Note that from the previous test this is
-    # set to 726
+
+    # Have the second party register.
+    # It should receive the amount of units of the second currency that it is entitled to.
+    # Note that from the previous test this is set to 726
     o2 = c2.main(0, 0, value=10000000, sender=tester.k2)
     assert o2 == 7260000000
+
+    # SNAPSHOT
     snapshot = s.snapshot()
-    # Set the price of the asset down to 300 wei
+
+    # Set the price of the asset down to 300 wei, through the data feed contract
     o3 = c.set(500, 300)
     assert o3 == 1
+
     # Finalize the contract. Expect code 3, meaning a margin call
     o4 = c2.main(0, 0)
     assert o4 == 3
+
+    # REVERT TO SNAPSHOT
     s.revert(snapshot)
-    # Don't change the price. Finalize, and expect code 5, meaning
-    # the time has not expired yet
+
+    # Don't change the price. Finalize, and expect code 5, meaning the time has not expired yet
     o5 = c2.main(0, 0)
     assert o5 == 5
+
+    # Mine 100 blocks
     s.mine(100, tester.a3)
-    # Mine ten blocks, and try. Expect code 4, meaning a normal execution
-    # where both get their share
+
+    # Expect code 4, meaning a normal execution where both get their share
     o6 = c2.main(0, 0)
     assert o6 == 4
 

@@ -1,5 +1,7 @@
 import json
+import os
 import time
+import logging
 from counterpartylib.lib import (util, config, database, log)
 from counterpartylib.lib.messages import execute
 from counterpartylib.lib import blocks, script
@@ -36,6 +38,8 @@ languages['serpent'] = serpent
 # hack cuz eth/serpent tries to json.loads(bytes[])
 languages['serpent'].mk_full_signature = lambda code, **kwargs: \
     json.loads(serpent.bytestostr(serpent.pyext.mk_full_signature(serpent.strtobytes(serpent.pre_transform(code, kwargs)))))
+
+logger = logging.getLogger(__name__)
 
 def encode_datalist(vals):
     def enc(n):
@@ -276,14 +280,16 @@ class state(object):
         return block_obj
 
     def snapshot(self):
-        raise UserWarning
+        name = "S" + binascii.hexlify(os.urandom(5)).decode('utf8')  # name must start with alphabetic char so prefix with S
+        logger.warn('SNAPSHOT %s' % name)
+
         cursor = self.db.cursor()
-        name = 'xyz'
         cursor.execute('''SAVEPOINT {}'''.format(name))
+
         return name
 
     def revert(self, name):
-        raise UserWarning
+        logger.warn('REVERT TO %s' % name)
         cursor = self.db.cursor()
         cursor.execute('''ROLLBACK TO SAVEPOINT {}'''.format(name))
 

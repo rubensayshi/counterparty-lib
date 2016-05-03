@@ -334,7 +334,8 @@ def vm_execute(ext, msg, code):
             elif op == 'ADDRESS':
                 stk.append(msg.to.int())
             elif op == 'BALANCE':
-                addr = Address.normalize(stk.pop() % 2**160)
+                addr = stk.pop()
+                addr = Address.normalize(addr)
                 stk.append(ext.get_balance(addr))
             elif op == 'ORIGIN':
                 stk.append(utils.coerce_to_int(ext.tx_origin)) # @TODO
