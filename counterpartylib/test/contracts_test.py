@@ -442,20 +442,20 @@ def main(datafeed, index):
 '''
 
 
-@pytest.mark.skip('BROKEN')
+@pytest.mark.skip('SNAPSHOT')
 def test_hedge():
     s, c = test_data_feeds()
     c2 = s.abi_contract(hedge_code, sender=tester.k0)
-    # Have the first party register, sending 10^16 wei and
+    # Have the first party register, sending 10000000 XCPtoshi and
     # asking for a hedge using currency code 500
-    o1 = c2.main(c.address, 500, value=10 ** 16)
+    o1 = c2.main(c.address.int(), 500, value=10000000, sender=tester.k0)
     assert o1 == 1
     # Have the second party register. It should receive the
     # amount of units of the second currency that it is
     # entitled to. Note that from the previous test this is
     # set to 726
-    o2 = c2.main(0, 0, value=10 ** 16, sender=tester.k2)
-    assert o2 == 7260000000000000000
+    o2 = c2.main(0, 0, value=10000000, sender=tester.k2)
+    assert o2 == 7260000000
     snapshot = s.snapshot()
     # Set the price of the asset down to 300 wei
     o3 = c.set(500, 300)
