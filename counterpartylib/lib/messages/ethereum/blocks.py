@@ -51,6 +51,7 @@ class Block(object):
     def get_storage_data(self, contract_id, key=None):
         contract_id = Address.normalize(contract_id)
         cursor = self.db.cursor()
+        originalkey = key
 
         if key == None:
             cursor.execute('''SELECT * FROM storage WHERE contract_id = ? ''', (contract_id.base58(),))
@@ -69,6 +70,8 @@ class Block(object):
         value = rlp.utils.big_endian_to_int(value)
 
         cursor.close()
+
+        logger.getChild('get_storage_data').debug('[%s] %s: %s' % (contract_id.base58(), originalkey, value))
 
         return value
 

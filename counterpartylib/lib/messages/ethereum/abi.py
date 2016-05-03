@@ -85,6 +85,7 @@ class ContractTranslator():
 
     def encode(self, name, args):
         fdata = self.function_data[name]
+
         o = zpad(encode_int(fdata['prefix']), 4) + \
             encode_abi(fdata['encode_types'], args)
         return o
@@ -232,7 +233,7 @@ def encode_single(typ, arg):
     elif base == 'address':
         assert sub == ''
         try:
-            return address.Address.normalize(arg).bytes()
+            return address.Address.normalize(arg).bytes32()
         except Exception as e:
             raise e
             raise EncodingError("Could not parse address: %r\n%s" % (arg, e))
@@ -308,7 +309,7 @@ def enc(typ, arg):
     sz = get_size(typ)
 
     if base in ('address', ) and not sub:
-        arg = address.Address.normalize(arg).hexstr()
+        arg = address.Address.normalize(arg).bytes32()
 
     # Encode dynamic-sized strings as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
@@ -374,7 +375,7 @@ def encode_abi(types, args):
 def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
-        data = data[:21]  # remove padding
+        data = data[-21:]  # remove padding
         return address.Address.normalize(data).base58()
     elif base == 'string' or base == 'bytes' or base == 'hash':
         return data[:int(sub)] if len(sub) else data

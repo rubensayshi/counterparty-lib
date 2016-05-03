@@ -327,10 +327,10 @@ data balances[2^160]
 def init():
     self.balances[msg.sender] = 1000
 
-def query(addr):
+def query(addr:address):
     return(self.balances[addr])
 
-def send(to, value):
+def send(to:address, value):
     from = msg.sender
     fromvalue = self.balances[from]
     if fromvalue >= value:
@@ -343,13 +343,15 @@ def send(to, value):
 '''
 
 
-@pytest.mark.skip('BROKEN')
 def test_currency():
     s = state()
     c = s.abi_contract(currency_code, sender=tester.k0)
-    o1 = c.send(tester.a2, 200)
+
+    o1 = c.query(tester.k0)
+    assert o1 == 1000
+    o1 = c.send(tester.a2, 200, sender=tester.a0)
     assert o1 == 1
-    o2 = c.send(tester.a2, 900)
+    o2 = c.send(tester.a2, 900, sender=tester.a0)
     assert o2 == 0
     o3 = c.query(tester.a0)
     assert o3 == 800

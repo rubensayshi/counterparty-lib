@@ -1,5 +1,6 @@
 import hashlib
 import pprint
+import logging
 
 import binascii
 
@@ -7,6 +8,7 @@ from counterpartylib.lib import script
 from counterpartylib.lib.messages.ethereum import ethutils, specials
 from counterpartylib.lib import config
 
+logger = logging.getLogger(__name__)
 
 VERSION_BYTE_LENGTH = 1
 DATA_LENGTH = 20
@@ -25,6 +27,9 @@ class Address(object):
     def bytes(self):
         return self.version + self.data
 
+    def bytes32(self):
+        return ((b'\x00' * 32) + self.version + self.data)[-32:]
+
     def base58(self):
         return script.base58_check_encode(self.data, self.version)
 
@@ -38,7 +43,11 @@ class Address(object):
         return self.hexbytes().decode('ascii')
 
     def int(self):
-        return ethutils.big_endian_to_int(ethutils.decode_hex(self.hexbytes()))
+        i = ethutils.decode_hex(self.hexbytes())
+        logger.warn(repr(self) + ".int() -> " + str(i))
+        logger.warn(repr(self) + ".int() -> " + str(ethutils.big_endian_to_int(i)))
+
+        return ethutils.big_endian_to_int(i)
 
     def __repr__(self):
         return '<%s %s %s>' % (
@@ -128,11 +137,15 @@ class Address(object):
     def frombytes(cls, addr):
         assert isinstance(addr, bytes)
 
+        print('frombytes', addr, len(addr))
+
+        if len(addr) == 32:
+            addr = addr[-(VERSION_BYTE_LENGTH + DATA_LENGTH):]
+
         assert len(addr) == VERSION_BYTE_LENGTH + DATA_LENGTH
 
         addrbyte, data = addr[0:1], addr[1:]
         return cls(data, addrbyte)
-
 
     @classmethod
     def frombase58(cls, addr):
