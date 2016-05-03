@@ -130,8 +130,6 @@ def apply_transaction(db, block, tx):
     message_gas = tx.startgas - intrinsic_gas
     message_data = vm.CallData([ethutils.safe_ord(x) for x in tx.data], 0, len(tx.data))
 
-    print('tx.to', repr(tx.to))
-
     message = vm.Message(Address.normalize(tx.sender), Address.normalize(tx.to),
                          tx.value, message_gas, message_data, code_address=Address.normalize(tx.to))
 

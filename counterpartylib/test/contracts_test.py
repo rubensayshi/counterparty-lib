@@ -616,13 +616,12 @@ return(self.storage[1])
 ''' % filename3
 
 
-@pytest.mark.skip('BROKEN')
 def test_callcode():
     s = state()
     open_cleanonteardown(filename3, 'w').write(add1_code)
     c = s.contract(callcode_test_code)
     o1 = s.send(tester.k0, c, 0)
-    os.remove(filename3)
+
     assert ethutils.big_endian_to_int(o1) == 64
 
 

@@ -118,7 +118,7 @@ class Address(object):
 
             return cls(data, version)
 
-        raise Exception
+        raise Exception("Cound not normalize Address: %s(%d)" % (addr, len(addr)))
 
     @classmethod
     def fromhex(cls, addr):
@@ -136,8 +136,6 @@ class Address(object):
     @classmethod
     def frombytes(cls, addr):
         assert isinstance(addr, bytes)
-
-        print('frombytes', addr, len(addr))
 
         if len(addr) == 32:
             addr = addr[-(VERSION_BYTE_LENGTH + DATA_LENGTH):]

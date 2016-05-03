@@ -557,7 +557,7 @@ def vm_execute(ext, msg, code):
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
                 to = utils.encode_int(to)
-                to = ((b'\x00' * (32 - len(to))) + to)[12:]
+                to = ((b'\x00' * (32 - len(to))) + to)[-32:]
                 cd = CallData(mem, meminstart, meminsz)
                 if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
@@ -566,7 +566,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OPCODE INACTIVE')
                 else:
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=to)
+                                       msg.depth + 1, code_address=Address.normalize(to))
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
@@ -585,7 +585,7 @@ def vm_execute(ext, msg, code):
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
             to = utils.encode_int(stk.pop())
-            to = ((b'\x00' * (32 - len(to))) + to)[12:]
+            to = ((b'\x00' * (32 - len(to))) + to)[-32:]
             xfer = ext.get_balance(msg.to)
             ext.set_balance(to, ext.get_balance(to) + xfer)
             ext.set_balance(msg.to, 0)
