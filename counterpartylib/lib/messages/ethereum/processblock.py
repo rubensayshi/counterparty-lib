@@ -188,9 +188,6 @@ class VMExt(VmExtBase):
 
         self.db = db # debug only
 
-        print('tx_hash', tx.tx_hash)
-        loglogger = logger.getChild('VMExt.log').getChild(tx.tx_hash)
-
         self._block = block
         self.block_prevhash = 0  # @TODO
         self.block_coinbase = 0  # @TODO
@@ -201,7 +198,11 @@ class VMExt(VmExtBase):
 
         self.get_code = block.get_code
         self.get_balance = block.get_balance
-        self.set_balance = block.set_balance
+
+        def set_balance(address, balance):
+            raise NotImplemented
+        self.set_balance = set_balance
+        self.delta_balance = lambda address, balance: block.delta_balance(address, balance, tx=tx)
         self.set_storage_data = block.set_storage_data
         self.get_storage_data = block.get_storage_data
         self.add_suicide = lambda x: block.suicides.append(x)
@@ -239,38 +240,36 @@ def _apply_msg(db, tx, ext, msg, code):
     gas = 0
     dat = []
 
-    try:
-        if True: # with db:
-            if msg.transfers_value:
-                # Transfer value, instaquit if not enough
-                log_msg.debug('TRANSFER %s -> %s: %d' % (msg.sender, msg.to, msg.value))
-                if not ext._block.transfer_value(tx, msg.sender, msg.to, msg.value):
-                    log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
-                    return 1, msg.gas, []
+    snapshot = ext._block.snapshot()
 
-            # Main loop
-            if msg.code_address and msg.code_address.data in specials.specials:
-                res, gas, dat = specials.specials[msg.code_address.data](ext, msg)
-            else:
-                res, gas, dat = vm.vm_execute(ext, msg, code)
-            # gas = int(gas)
-            # assert ethutils.is_numeric(gas)
-            if trace_msg:
-                log_msg.debug('MSG APPLIED', gas_remained=gas,
-                              sender=msg.sender, to=msg.to, data=dat)
-                if log_state.is_active('trace'):
-                    log_state.trace('MSG POST STATE SENDER', account=msg.sender.base58(),
-                                    bal=ext.get_balance(msg.sender),
-                                    state=ext.log_storage(msg.sender))
-                    log_state.trace('MSG POST STATE RECIPIENT', account=msg.to.base58(),
-                                    bal=ext.get_balance(msg.to),
-                                    state=ext.log_storage(msg.to))
+    if msg.transfers_value:
+        # Transfer value, instaquit if not enough
+        log_msg.debug('TRANSFER %s -> %s: %d' % (msg.sender, msg.to, msg.value))
+        if not ext._block.transfer_value(msg.sender, msg.to, msg.value, tx=tx):
+            log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
+            return 1, msg.gas, []
 
-            if res == 0:
-                log_msg.debug('REVERTING')
-                raise Rollback
-    except Rollback:
-        pass
+    # Main loop
+    if msg.code_address and msg.code_address.data in specials.specials:
+        res, gas, dat = specials.specials[msg.code_address.data](ext, msg)
+    else:
+        res, gas, dat = vm.vm_execute(ext, msg, code)
+    # gas = int(gas)
+    # assert ethutils.is_numeric(gas)
+    if trace_msg:
+        log_msg.debug('MSG APPLIED', gas_remained=gas,
+                      sender=msg.sender, to=msg.to, data=dat, res=res)
+        if log_state.is_active('trace'):
+            log_state.trace('MSG POST STATE SENDER', account=msg.sender.base58(),
+                            bal=ext.get_balance(msg.sender),
+                            state=ext.log_storage(msg.sender))
+            log_state.trace('MSG POST STATE RECIPIENT', account=msg.to.base58(),
+                            bal=ext.get_balance(msg.to),
+                            state=ext.log_storage(msg.to))
+
+    if res == 0:
+        log_msg.debug('REVERTING')
+        ext._block.revert(snapshot)
 
     return res, gas, dat
 

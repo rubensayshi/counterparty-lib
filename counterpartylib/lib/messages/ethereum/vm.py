@@ -556,8 +556,7 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OUT OF GAS', needed=gas+extra_gas)
             if ext.get_balance(msg.to) >= value and msg.depth < 1024:
                 compustate.gas -= (gas + extra_gas)
-                to = utils.encode_int(to)
-                to = ((b'\x00' * (32 - len(to))) + to)[-32:]
+                to = Address.normalize(utils.encode_int(to))
                 cd = CallData(mem, meminstart, meminsz)
                 if ext.post_homestead_hardfork() and op == 'DELEGATECALL':
                     call_msg = Message(msg.sender, msg.to, msg.value, submsg_gas, cd,
@@ -566,7 +565,7 @@ def vm_execute(ext, msg, code):
                     return vm_exception('OPCODE INACTIVE')
                 else:
                     call_msg = Message(msg.to, msg.to, value, submsg_gas, cd,
-                                       msg.depth + 1, code_address=Address.normalize(to))
+                                       msg.depth + 1, code_address=to)
                 result, gas, data = ext.msg(call_msg)
                 if result == 0:
                     stk.append(0)
@@ -584,11 +583,15 @@ def vm_execute(ext, msg, code):
                 return vm_exception('OOG EXTENDING MEMORY')
             return peaceful_exit('RETURN', compustate.gas, mem[s0: s0 + s1])
         elif op == 'SUICIDE':
-            to = utils.encode_int(stk.pop())
-            to = ((b'\x00' * (32 - len(to))) + to)[-32:]
-            xfer = ext.get_balance(msg.to)
-            ext.set_balance(to, ext.get_balance(to) + xfer)
-            ext.set_balance(msg.to, 0)
+            to = stk.pop()
+            to = utils.encode_int(to)
+            to = Address.normalize(to)
+
+            assert to is not None
+
+            xfer = ext.get_balance(msg.to)  # balance of the contract
+            ext.delta_balance(msg.to, -xfer)  # transfer balance out of the contract
+            ext.delta_balance(to, xfer)  # transfer balance to suicide address
             ext.add_suicide(msg.to)
             # print('suiciding %s %s %d' % (msg.to, to, xfer))
             return 1, compustate.gas, []
@@ -605,6 +608,7 @@ class VmExtBase(object):
         self.get_code = lambda addr: b''
         self.get_balance = lambda addr: 0
         self.set_balance = lambda addr, balance: 0
+        self.delta_balance = lambda addr, balance: 0
         self.set_storage_data = lambda addr, key, value: 0
         self.get_storage_data = lambda addr, key: 0
         self.log_storage = lambda addr: 0

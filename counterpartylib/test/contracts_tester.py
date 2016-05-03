@@ -27,7 +27,7 @@ a5 = ADDR[6]
 # we never use the privkey, so kN == aN
 k0, k1, k2, k3, k4, k5 = a0, a1, a2, a3, a4, a5
 
-startgas = 3141592
+DEFAULT_STARTGAS = 3141592
 gas_price = 1
 
 DEFAULT_SENDER = ADDR[0]
@@ -120,7 +120,8 @@ class ABIContract(object):
                                  self.address,
                                  kwargs.get('value', 0),
                                  self._translator.encode(f, args),
-                                 **dict_without(kwargs, 'sender', 'value', 'output'))
+                                 startgas=kwargs.get('startgas', DEFAULT_STARTGAS),
+                                 **dict_without(kwargs, 'startgas', 'sender', 'value', 'output'))
                 # Compute output data
                 if kwargs.get('output', '') == 'raw':
                     outdata = o['output']
@@ -148,7 +149,7 @@ class state(object):
         self.TIMESTAMP = int(time.time())
         self.log_listeners = []
 
-    def contract(self, code, sender=DEFAULT_SENDER, endowment=0, language='serpent', lll=False, gas=None):
+    def contract(self, code, sender=DEFAULT_SENDER, endowment=0, language='serpent', lll=False):
         if language not in languages:
             raise NotImplemented
             # languages[language] = __import__(language)
@@ -161,7 +162,7 @@ class state(object):
 
         return o
 
-    def abi_contract(self, code, sender=DEFAULT_SENDER, endowment=0, language='serpent', contract_name='', lll=False, gas=None, **kwargs):
+    def abi_contract(self, code, sender=DEFAULT_SENDER, endowment=0, language='serpent', contract_name='', lll=False, **kwargs):
         if contract_name:
             assert language == 'solidity'
             cn_args = dict(contract_name=contract_name)
@@ -175,14 +176,14 @@ class state(object):
 
         evm = language.compile(code, **cn_args) if not lll else language.compile_lll(code)
 
-        address = self.evm(evm, sender, endowment, gas)
+        address = self.evm(evm, sender, endowment)
 
         assert len(self.block.get_code(address)), "Contract code empty"
 
         _abi = language.mk_full_signature(code, **cn_args)
         return ABIContract(self, _abi, address)
 
-    def evm(self, evm, sender=DEFAULT_SENDER, endowment=0, gas=None):
+    def evm(self, evm, sender=DEFAULT_SENDER, endowment=0):
         tx, success, output = self.do_send(sender, '', endowment, evm)
         if not success:
             raise ContractCreationFailed()
@@ -194,7 +195,7 @@ class state(object):
                         "or send(sender, to, value, data) directly, "
                         "using the abi module to generate data if needed")
 
-    def mock_tx(self, sender, to, value, data):
+    def mock_tx(self, sender, to, value, data, startgas=DEFAULT_STARTGAS):
         # create new block
         block_obj = self.mine()
 
@@ -224,8 +225,7 @@ class state(object):
 
         return tx, tx_obj, block_obj
 
-
-    def do_send(self, sender, to, value, data):
+    def do_send(self, sender, to, value, data, startgas=DEFAULT_STARTGAS):
         print('DOSEND', sender, to, value, data)
 
         if not sender:
@@ -235,7 +235,7 @@ class state(object):
         sender = Address.normalize(sender)
         to = Address.normalize(to)
 
-        tx, tx_obj, block_obj = self.mock_tx(sender, to, value, data)
+        tx, tx_obj, block_obj = self.mock_tx(sender, to, value, data, startgas)
 
         # Run.
         processblock.MULTIPLIER_CONSTANT_FACTOR = 1
@@ -246,11 +246,11 @@ class state(object):
         # Decode, return result.
         return tx_obj, success, output
 
-    def _send(self, sender, to, value, evmdata=b'', output=None, funid=None, abi=None):
+    def _send(self, sender, to, value, evmdata=b'', output=None, funid=None, abi=None, startgas=DEFAULT_STARTGAS):
         if funid is not None or abi is not None:
             raise Exception("Send with funid+abi is deprecated. Please use the abi_contract mechanism")
 
-        tx, s, o = self.do_send(sender, to, value, evmdata)
+        tx, s, o = self.do_send(sender, to, value, evmdata, startgas)
 
         if not s:
             raise TransactionFailed()
@@ -280,7 +280,7 @@ class state(object):
         return block_obj
 
     def snapshot(self):
-        name = "S" + binascii.hexlify(os.urandom(5)).decode('utf8')  # name must start with alphabetic char so prefix with S
+        name = "S" + binascii.hexlify(os.urandom(16)).decode('utf8')  # name must start with alphabetic char so prefix with S
         logger.warn('SNAPSHOT %s' % name)
 
         cursor = self.db.cursor()

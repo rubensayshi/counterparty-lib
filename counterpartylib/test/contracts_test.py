@@ -512,6 +512,11 @@ def test_lifo():
 
 # Test suicides and suicide reverts
 suicider_code = '''
+data creator
+
+def init():
+    self.creator = msg.sender
+
 def mainloop(rounds):
     self.storage[15] = 40
     self.suicide()
@@ -519,45 +524,44 @@ def mainloop(rounds):
     while i < rounds:
         i += 1
         self.storage[i] = i
+    return(i)
 
 def entry(rounds):
     self.storage[15] = 20
-    self.mainloop(rounds, gas=msg.gas - 600)
+    return self.mainloop(rounds, gas=msg.gas - 600)
 
 def ping_ten():
     return(10)
 
 def suicide():
-    suicide(0)
+    suicide(self.creator)
 
 def ping_storage15():
     return(self.storage[15])
 '''
 
 
-@pytest.mark.skip('BROKEN')
 def test_suicider():
     s = state()
+
     c = s.abi_contract(suicider_code)
-    prev_gas_limit = tester.gas_limit
-    tester.gas_limit = 200000
-    # Run normally: suicide processes, so the attempt to ping the
-    # contract fails
-    c.entry(5)
+    # Run normally: suicide processes, so the attempt to ping the contract fails
+    assert c.entry(5) == 5
     o2 = c.ping_ten()
     assert o2 is None
+
     c = s.abi_contract(suicider_code)
     # Run the suicider in such a way that it suicides in a sub-call,
-    # then runs out of gas, leading to a revert of the suicide and the
-    # storage mutation
-    c.entry(8000)
-    # Check that the suicide got reverted
+    # then runs out of gas, leading to a revert of the suicide and the storage mutation
+    o1 = c.entry(8000)
+    assert o1 == 0
+
+    # Check that the suicide got reverted and the contract still works
     o2 = c.ping_ten()
     assert o2 == 10
-    # Check that the storage op got reverted
+    # Check that the storage op got reverted and the contract still works
     o3 = c.ping_storage15()
     assert o3 == 20
-    tester.gas_limit = prev_gas_limit
 
 
 # Test reverts

@@ -80,7 +80,7 @@ class Address(object):
 
     @classmethod
     def normalize(cls, addr):
-        if not addr:
+        if addr is None or addr == '':
             return None
 
         if isinstance(addr, Address):
@@ -109,8 +109,8 @@ class Address(object):
             # print(((b'\x00' * 32) + addr)[-20:])
             # print(((b'\x00' * 32) + addr)[-20:] in specials.specials)
 
+            # check if zero-padded address is a special contract
             addrpaddded = ((b'\x00' * DATA_LENGTH) + addr)[-DATA_LENGTH:]
-
             if addrpaddded in specials.specials:
                 return cls(addrpaddded, config.CONTRACT_ADDRESSVERSION)
 

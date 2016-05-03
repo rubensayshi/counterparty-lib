@@ -1,3 +1,4 @@
+import os
 import pickle
 import logging
 
@@ -21,6 +22,7 @@ class Block(object):
 
         cursor = db.cursor()
         block = list(cursor.execute('''SELECT * FROM blocks WHERE block_hash = ?''', (block_hash,)))[0]
+        cursor.close()
 
         self.block_index = block['block_index']
         self.block_hash = block['block_hash']
@@ -28,20 +30,45 @@ class Block(object):
         self.timestamp = block['block_time']
         self.number = block['block_index']
         self.prevhash = block['previous_block_hash']
-        self.gas_used = 0
         self.gas_limit = GAS_LIMIT
+
+        self.log_listeners = []
+        self.log_listeners.append(lambda log: logger.getChild('log').debug(str(log)))
+
+        self.snapshots = {}
+
+        # state, anything added to this should be added to snapshot/revert
+        self.gas_used = 0
         self.refunds = 0  # @TODO
         self.suicides = []
         self.logs = []
-        self.log_listeners = []
 
-        self.log_listeners.append(lambda log: logger.getChild('log').debug(str(log)))
+    def snapshot(self):
+        name = "S" + binascii.hexlify(os.urandom(16)).decode('utf8')  # name must start with alphabetic char so prefix with S
+        logger.warn('SNAPSHOT %s' % name)
 
-        cursor.close()
+        cursor = self.db.cursor()
+        cursor.execute('''SAVEPOINT {}'''.format(name))
 
-    def revert(self):
-        # @TODO
-        logger.debug('### REVERTING ###')
+        self.snapshots[name] = {
+            'suicides': list(self.suicides),
+            'logs': list(self.logs),
+            'refunds': self.refunds,
+            'gas_used': self.gas_used,
+        }
+
+        return name
+
+    def revert(self, name):
+        logger.warn('REVERT TO %s' % name)
+        cursor = self.db.cursor()
+        cursor.execute('''ROLLBACK TO SAVEPOINT {}'''.format(name))
+
+        self.suicides = self.snapshots[name]['suicides']
+        self.logs = self.snapshots[name]['logs']
+        self.refunds = self.snapshots[name]['refunds']
+        self.gas_used = self.snapshots[name]['gas_used']
+
 
     def add_log(self, log):
         self.logs.append(log)
@@ -213,10 +240,11 @@ class Block(object):
             util.debit(self.db, address.base58(), asset, -value, action='delta balance', event=tx.tx_hash)
         pass  # @TODO
 
-    def transfer_value(self, tx, source, destination, quantity, asset=config.XCP):
+    def transfer_value(self, source, destination, quantity, asset=config.XCP, tx=None):
         source = Address.normalize(source)
         destination = Address.normalize(destination)
 
+        assert tx is not None
         if source:
             util.debit(self.db, source.base58(), asset, quantity, action='transfer value', event=tx.tx_hash)
         if destination:
@@ -228,11 +256,11 @@ class Block(object):
 
         cursor = self.db.cursor()
         logger.debug('SUICIDING {}'.format(contract_id))
-        bindings = {'contract_id': contract_id}
-        log.message(self.db, self.number, 'delete', 'contracts', bindings)
-        cursor.execute('''DELETE FROM contracts WHERE contract_id = :contract_id''', bindings)
+        bindings = {'contract_id': contract_id.base58()}
         log.message(self.db, self.number, 'delete', 'storage', bindings)
         cursor.execute('''DELETE FROM storage WHERE contract_id = :contract_id''', bindings)
+        log.message(self.db, self.number, 'delete', 'contracts', bindings)
+        cursor.execute('''DELETE FROM contracts WHERE contract_id = :contract_id''', bindings)
 
         cursor.close()
 
