@@ -1006,7 +1006,6 @@ def clear(self, id):
 """
 
 
-@pytest.mark.skip('BROKEN')
 def test_crowdfund():
     """
     test crowdfund smart contract, keep in mind that we create a new block for every contract call

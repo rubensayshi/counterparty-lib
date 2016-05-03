@@ -194,6 +194,13 @@ class VMExt(VmExtBase):
         loglogger = logger.getChild('VMExt.log').getChild(tx.tx_hash)
 
         self._block = block
+        self.block_prevhash = 0  # @TODO
+        self.block_coinbase = 0  # @TODO
+        self.block_timestamp = block.timestamp
+        self.block_number = block.number
+        self.block_difficulty = 0  # @TODO
+        self.block_gas_limit = 0  # @TODO
+
         self.get_code = block.get_code
         self.get_balance = block.get_balance
         self.set_balance = block.set_balance
