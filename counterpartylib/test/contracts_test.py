@@ -1828,16 +1828,23 @@ def moo():
 """
 
 
-@pytest.mark.skip(reason="logging todo")
 def test_string_logging():
     s = state()
     c = s.abi_contract(string_logging_code)
     o = []
-    s.block.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+
+    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     c.moo()
-    assert o == [{"_event_type": "foo", "x": "bob", "__hash_x": ethutils.sha3("bob"),
-                  "y": "cow", "__hash_y": ethutils.sha3("cow"), "z": "dog",
-                  "__hash_z": ethutils.sha3("dog")}]
+
+    assert o == [{
+        "_event_type": b"foo",
+        "x": b"bob",
+        "__hash_x": ethutils.sha3("bob"),
+        "y": b"cow",
+        "__hash_y": ethutils.sha3("cow"),
+        "z": b"dog",
+        "__hash_z": ethutils.sha3("dog")
+    }]
 
 
 params_code = """
