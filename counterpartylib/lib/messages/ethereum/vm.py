@@ -516,6 +516,7 @@ def vm_execute(ext, msg, code):
             if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
                     not mem_extend(mem, compustate, op, memoutstart, memoutsz):
                 return vm_exception('OOG EXTENDING MEMORY')
+
             to = Address.normalize(to)
             extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
                 (value > 0) * opcodes.GCALLVALUETRANSFER

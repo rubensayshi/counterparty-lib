@@ -299,10 +299,23 @@ def test_namecoin():
     assert o3 == 1
 
 
-# Test a simple send (test not originally in pyeth)
+# Test a simple text return (test not originally in pyeth)
+simple_text_return_code = '''
+def returntext(v):
+    return(text("testing123"):str)
+'''
 
+
+def test_simple_text_return():
+    s = state()
+    c = s.abi_contract(simple_text_return_code)
+
+    assert c.returntext() == bytes("testing123", "utf8")
+
+
+# Test a simple send (test not originally in pyeth)
 send_code = '''
-def returnfixed(v):
+def send(v):
     send(msg.sender, v)
 '''
 
@@ -315,8 +328,48 @@ def test_send():
     value = 1000000  # amount send into the contract
     v = 30000  # v= for the contract, amount we get back
     gcost = 53356  # gascost
-    c.returnfixed(v, value=value, sender=tester.a2)
+    c.send(v, value=value, sender=tester.a2)
     assert s.block.get_balance(tester.a2) == startbalance - gcost - value + v
+
+
+# Test a simple send to hardcoded address (test not originally in pyeth)
+send_arg_code = '''
+def send(s:address, v):
+    send(s, v)
+'''
+
+
+def test_send_arg():
+    a2 = address.Address.normalize(tester.a2)
+
+    s = state()
+    c = s.abi_contract(send_arg_code)
+
+    logger.warn(a2.int())
+
+    startbalance = s.block.get_balance(tester.a2)
+    v = 30000  # v = for the contract, amount we get back
+    c.send(tester.a2, v, value=10000000, sender=tester.a1)
+    assert s.block.get_balance(tester.a2) == startbalance + v
+
+
+# Test a simple send to hardcoded address (test not originally in pyeth)
+send_hardcoded_code = '''
+def send(v):
+    send(%s, v)
+'''
+
+
+def test_send_hardcoded():
+    a2 = address.Address.normalize(tester.a2)
+
+    s = state()
+    c = s.abi_contract(send_hardcoded_code % (a2.int(), ))
+
+    startbalance = s.block.get_balance(tester.a2)
+    v = 30000  # v = for the contract, amount we get back
+    c.send(v, value=10000000, sender=tester.a1)
+    assert s.block.get_balance(tester.a2) == startbalance + v
 
 
 # Test a simple currency implementation
