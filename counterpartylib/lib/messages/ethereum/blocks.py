@@ -43,6 +43,17 @@ class Block(object):
         self.suicides = []
         self.logs = []
 
+    def get_block_hash(self, block_index):
+        if block_index == self.block_index:
+            return self.block_hash
+
+        cursor = self.db.cursor()
+        logger.warn(block_index)
+        block = list(cursor.execute('''SELECT block_hash FROM blocks WHERE block_index = ?''', (block_index,)))[0]
+        cursor.close()
+
+        return block['block_hash']
+
     def snapshot(self):
         name = "S" + binascii.hexlify(os.urandom(16)).decode('utf8')  # name must start with alphabetic char so prefix with S
         logger.warn('SNAPSHOT %s' % name)

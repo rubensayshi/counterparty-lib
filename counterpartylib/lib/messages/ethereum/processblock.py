@@ -189,6 +189,16 @@ class VMExt(VmExtBase):
         self.db = db # debug only
 
         self._block = block
+
+        def block_hash(x):
+            logger.warn('block_hash %s' % x)
+            if x > 0 and x > block.number - 256 and x <= block.number:
+                return binascii.unhexlify(block.get_block_hash(x))
+            else:
+                return b''
+
+        self.block_hash = block_hash
+
         self.block_prevhash = 0  # @TODO
         self.block_coinbase = 0  # @TODO
         self.block_timestamp = block.timestamp

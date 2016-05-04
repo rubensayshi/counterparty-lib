@@ -8,12 +8,10 @@ from counterpartylib.lib import (util, config, database, log)
 from counterpartylib.lib.messages import execute
 from counterpartylib.lib.messages.ethereum import (blocks, processblock, ethutils, abi, address)
 import rlp
-import subprocess  # Serpent is Python 3‐incompatible.
 import binascii
 import os
 import sys
 import logging
-import tempfile
 import serpent
 
 from counterpartylib.test import contracts_tester as tester
@@ -1528,23 +1526,30 @@ def get_prevhashes(k):
 """
 
 
-@pytest.mark.skip("mining")
 def test_prevhashes():
+    global db
+
     s = state()
     c = s.abi_contract(prevhashes_code)
-    s.mine(7)
+
     # Hashes of last 14 blocks including existing one
     o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
-    # hash of self = 0, hash of blocks back to genesis block as is, hash of
-    # blocks before genesis block = 0
-    t1 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2::-1]] \
-         + [0] * 6
+
+    cursor = db.cursor()
+    blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (14, )))
+    cursor.close()
+    t1 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks]
+
     assert o1 == t1
-    s.mine(256)
+
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
     o2 = [x % 2 ** 256 for x in c.get_prevhashes(270)]
-    t2 = [0] + [utils.big_endian_to_int(b.hash) for b in s.blocks[-2:-258:-1]] \
-         + [0] * 13
+
+    cursor = db.cursor()
+    blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (256, )))
+    cursor.close()
+    t2 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks] + [0] * (270 - 256)
+
     assert o2 == t2
 
 
