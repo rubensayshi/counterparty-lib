@@ -1,13 +1,11 @@
 # -*- coding: utf8 -*-
 
-# @TODO
-# import bitcoin
+import bitcoin
 import hashlib
 
 from ..ethereum import ethutils as utils, opcodes
 from .ethutils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
-
 
 # @TODO
 # try:
@@ -28,19 +26,24 @@ def proc_ecrecover(ext, msg):
     gas_cost = OP_GAS
     if msg.gas < gas_cost:
         return 0, 0, []
-    b = [0] * 32
-    msg.data.extract_copy(b, 0, 0, 32)
-    h = b''.join([ascii_chr(x) for x in b])
+
+    message_hash_bytes = [0] * 32
+    msg.data.extract_copy(message_hash_bytes, 0, 0, 32)
+    message_hash = b''.join(map(ascii_chr, message_hash_bytes))
+
     v = msg.data.extract32(32)
     r = msg.data.extract32(64)
     s = msg.data.extract32(96)
-    if r >= bitcoin.N or s >= bitcoin.N or v < 27 or v > 28:
-        return 1, msg.gas - opcodes.GECRECOVER, []
-    recovered_addr = ecdsa_recover_raw(h, (v, r, s))
-    if recovered_addr in (False, (0, 0)):
+
+    sig = utils.zpad(utils.int_to_big_endian(v), 1) + utils.zpad(utils.int_to_big_endian(r), 32) + utils.zpad(utils.int_to_big_endian(s), 32)
+
+    try:
+        pubkey = bitcoin.core.key.CPubKey.recover_compact(message_hash, sig)
+    except:
+        # Recovery failed
         return 1, msg.gas - gas_cost, []
-    pub = bitcoin.encode_pubkey(recovered_addr, 'bin')
-    o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pub[1:])[-20:]]
+
+    o = [0] * 12 + [safe_ord(x) for x in utils.sha3(pubkey[1:])[-20:]]
     return 1, msg.gas - gas_cost, o
 
 

@@ -1408,23 +1408,21 @@ def test_ecrecover(h, v, r, s):
 """
 
 
-@pytest.mark.skip("ecrecover")
 def test_ecrecover():
+    """
+    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them
+    """
     s = state()
     c = s.abi_contract(ecrecover_code)
 
-    priv = rlp.utils.encode_hex(utils.sha3('some big long brainwallet password'))
-    pub = bitcoin.privtopub(priv)
+    H = 60772363713814795336605161565488663769306106990467902980560042300358765319404
+    V = 27
+    R = 90287243237479221899775907091281500587081321452634188922390320940254754609975
+    S = 24052755845221258772445669055700842241658207900505567178705869501444775369481
+    pubkey = 794520059615976424790363096434176409370405942122
 
-    msghash = rlp.utils.encode_hex(utils.sha3('the quick brown fox jumps over the lazy dog'))
-    V, R, S = ecdsa_sign_raw(msghash, priv)
-    assert bitcoin.ecdsa_raw_verify(msghash, (V, R, S), pub)
-
-    addr = ethutils.big_endian_to_int(utils.sha3(bitcoin.encode_pubkey(pub, 'bin')[1:])[12:])
-    assert ethutils.big_endian_to_int(utils.privtoaddr(priv)) == addr
-
-    result = c.test_ecrecover(utils.big_endian_to_int(rlp.utils.decode_hex(msghash)), V, R, S)
-    assert result == addr
+    result = c.test_ecrecover(H, V, R, S)
+    assert result == pubkey
 
 
 sha256_code = """
