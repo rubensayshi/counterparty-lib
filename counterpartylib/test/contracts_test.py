@@ -1163,13 +1163,13 @@ save(self.buf2, mystr, chars=4)
 """
 
 
-@pytest.mark.skip('bitcoin')
 def test_saveload2():
     s = state()
     c = s.contract(saveload_code2)
     s.send(tester.k0, c, 0)
-    assert bitcoin.encode(s.block.get_storage_data(c, 0), 256) == b'01ab' + b'\x00' * 28
-    assert bitcoin.encode(s.block.get_storage_data(c, 1), 256) == b'01ab' + b'\x00' * 28
+
+    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 0)) == b'01ab' + b'\x00' * 28
+    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 1)) == b'01ab' + b'\x00' * 28
 
 
 sdiv_code = """
