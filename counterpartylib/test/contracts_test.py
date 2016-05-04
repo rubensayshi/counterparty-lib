@@ -1433,7 +1433,6 @@ def main():
 """
 
 
-@pytest.mark.skip("shahahaha")
 def test_sha256():
     s = state()
     c = s.abi_contract(sha256_code)
@@ -1447,13 +1446,30 @@ def test_sha256():
     ]
 
 
+ripemd160_code = """
+def main():
+    return([ripemd160(0, chars=0), ripemd160(3), ripemd160(text("doge"), chars=3), ripemd160(text("dog"):str), ripemd160([0,0,0,0,0]:arr), ripemd160([0,0,0,0,0,0], items=5)]:arr)
+"""
+
+
+def test_ripemd160():
+    s = state()
+    c = s.abi_contract(ripemd160_code)
+    assert c.main() == [
+        0x9c1185a5c5e9fc54612808977ee8f548b2258d31,
+        0x44d90e2d3714c8663b632fcf0f9d5f22192cc4c8,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
+        0x9164cab7f680fd7a790080f2e76e049811074349,
+        0x9164cab7f680fd7a790080f2e76e049811074349]
+
+
 sha3_code = """
 def main():
     return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
 """
 
 
-@pytest.mark.skip("shahahaha")
 def test_sha3():
     s = state()
     c = s.abi_contract(sha3_code)
