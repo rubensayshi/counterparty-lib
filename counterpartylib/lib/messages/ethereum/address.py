@@ -158,6 +158,8 @@ class Address(object):
         assert len(data) == DATA_LENGTH
         assert len(chk0) == CHECKSUM_LENGTH
 
+        # @TODO: checksum
+
         return cls(data, addrbyte)
 
 

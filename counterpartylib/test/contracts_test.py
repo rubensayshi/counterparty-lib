@@ -572,12 +572,12 @@ def entry():
     self.recurse(gas=100000)
 
 def non_recurse():
-    send(7, 9)
+    send(%s, 9)
     self.storage[8080] = 4040
     self.storage[160160] = 2020
 
 def recurse():
-    send(8, 9)
+    send(%s, 9)
     self.storage[8081] = 4039
     self.storage[160161] = 2019
     self.recurse()
@@ -586,15 +586,22 @@ def recurse():
 '''
 
 
-@pytest.mark.skip('BROKEN')
 def test_reverter():
+    a1 = address.Address.normalize(tester.a1)
+    a2 = address.Address.normalize(tester.a2)
+
     s = state()
-    c = s.abi_contract(reverter_code, endowment=10 ** 15)
+
+    # get balances before contracts
+    a1b = s.block.get_balance(a1.base58())
+    a2b = s.block.get_balance(a2.base58())
+
+    c = s.abi_contract(reverter_code % (a1.int(), a2.int()), endowment=100000)
     c.entry()
     assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(rlp.utils.decode_hex('0' * 39 + '7')) == 9
+    assert s.block.get_balance(tester.a1) == a1b + 9
     assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(rlp.utils.decode_hex('0' * 39 + '8')) == 0
+    assert s.block.get_balance(tester.a2) == a2b + 0
 
 
 # Test stateless contracts
