@@ -71,7 +71,16 @@ class ModuleLoggingFilter(logging.Filter):
             return False
         return record.name[nlen] == "."
 
+LOGGING_SETUP = False
 def set_up(logger, verbose=False, logfile=None, console_logfilter=None):
+    global LOGGING_SETUP
+
+    if LOGGING_SETUP:
+        logger.getChild('log.set_up').debug('logging already setup')
+        return
+    LOGGING_SETUP = True
+
+
     log_level = logging.DEBUG if verbose else logging.INFO
     logger.setLevel(log_level)
 
