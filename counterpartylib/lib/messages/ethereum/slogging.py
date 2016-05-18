@@ -36,6 +36,12 @@ class SLoggerWithTrace(object):
     def trace(self, msg, **kwargs):
         self.debug(msg, **kwargs)
 
+    def warn(self, msg, **kwargs):
+        if len(list(kwargs.keys())) > 0:
+            self.logger.warn("{} {}".format(msg, log_dict(kwargs)))
+        else:
+            self.logger.warn(msg, **kwargs)
+
     def debug(self, msg, **kwargs):
         if len(list(kwargs.keys())) > 0:
             self.logger.debug("{} {}".format(msg, log_dict(kwargs)))

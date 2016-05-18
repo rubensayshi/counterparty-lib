@@ -15,6 +15,7 @@ import socket
 import signal
 import appdirs
 import platform
+import bitcoin
 from urllib.parse import quote_plus as urlencode
 
 from counterpartylib.lib import api, config, util, exceptions, blocks, check, backend, database, transaction, script, log
@@ -85,7 +86,7 @@ def initialise(database_file=None, log_file=None, api_log_file=None,
                 rpc_batch_size=config.DEFAULT_RPC_BATCH_SIZE,
                 check_asset_conservation=config.DEFAULT_CHECK_ASSET_CONSERVATION,
                 backend_ssl_verify=None, rpc_allow_cors=None,
-                verify_old_hash=None, verify_checkpoints=None
+                verify_old_hash=None, verify_checkpoints=None,
                 p2sh_dust_return_pubkey=None):
 
      # Data directory
@@ -307,6 +308,7 @@ def initialise(database_file=None, log_file=None, api_log_file=None,
     else:
         config.PREFIX = b'CNTRPRTY'             # 8 bytes
 
+    bitcoin.SelectParams('testnet' if config.TESTNET else 'mainnet')
     # (more) Testnet
     if config.TESTNET:
         config.MAGIC_BYTES = config.MAGIC_BYTES_TESTNET
