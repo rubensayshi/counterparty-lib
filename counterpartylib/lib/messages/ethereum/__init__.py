@@ -32,18 +32,3 @@ if not __version__:
     except:
         pass
 
-if not __version__:
-    __version__ = 'undefined'
-
-# ########### endversion ##################
-
-'''from ethereum import utils
-from ethereum import trie
-from ethereum import securetrie
-from ethereum import blocks
-from ethereum import transactions
-from ethereum import processblock
-from ethereum import tester
-from ethereum import abi
-from ethereum import keys
-from ethereum import ethash'''
