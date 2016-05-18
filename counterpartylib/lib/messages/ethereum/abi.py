@@ -1,11 +1,13 @@
 import sys
 import re
 import yaml  # use yaml instead of json to get non unicode (works with ascii only data)
-from ethereum import utils
+from . import ethutils as utils
 from rlp.utils import decode_hex, encode_hex
-from ethereum.utils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32
-from ethereum.utils import isnumeric
+from .ethutils import encode_int, zpad, big_endian_to_int, is_numeric, is_string, ceil32, is_numeric as isnumeric
+from . import address
 import ast
+
+
 
 
 def json_decode(x):
@@ -118,8 +120,7 @@ class ContractTranslator():
         for i in range(len(names)):
             if indexed[i]:
                 topic_bytes = utils.zpad(utils.encode_int(log.topics[c1 + 1]), 32)
-                o[names[i]] = decode_single(process_type(indexed_types[c1]),
-                                            topic_bytes)
+                o[names[i]] = decode_single(process_type(indexed_types[c1]), topic_bytes)
                 c1 += 1
             else:
                 o[names[i]] = deserialized_args[c2]
@@ -230,16 +231,11 @@ def encode_single(typ, arg):
     # Addresses: address (== hash160)
     elif base == 'address':
         assert sub == ''
-        if isnumeric(arg):
-            return zpad(encode_int(arg), 32)
-        elif len(arg) == 20:
-            return zpad(arg, 32)
-        elif len(arg) == 40:
-            return zpad(decode_hex(arg), 32)
-        elif len(arg) == 42 and arg[2:] == '0x':
-            return zpad(decode_hex(arg[2:]), 32)
-        else:
-            raise EncodingError("Could not parse address: %r" % arg)
+        try:
+            return address.Address.normalize(arg).bytes()
+        except Exception as e:
+            raise e
+            raise EncodingError("Could not parse address: %r\n%s" % (arg, e))
     raise EncodingError("Unhandled type: %r %r" % (base, sub))
 
 
@@ -310,6 +306,10 @@ lentyp = 'uint', 256, []
 def enc(typ, arg):
     base, sub, arrlist = typ
     sz = get_size(typ)
+
+    if base in ('address', ) and not sub:
+        arg = address.Address.normalize(arg).hexstr()
+
     # Encode dynamic-sized strings as <len(str)> + <str>
     if base in ('string', 'bytes') and not sub:
         assert isinstance(arg, (str, bytes, utils.unicode)), \
@@ -374,7 +374,8 @@ def encode_abi(types, args):
 def decode_single(typ, data):
     base, sub, _ = typ
     if base == 'address':
-        return encode_hex(data[12:])
+        data = data[:21]  # remove padding
+        return address.Address.normalize(data).base58()
     elif base == 'string' or base == 'bytes' or base == 'hash':
         return data[:int(sub)] if len(sub) else data
     elif base == 'uint':

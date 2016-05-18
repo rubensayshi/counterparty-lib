@@ -31,7 +31,7 @@ from counterpartylib.lib import script
 from counterpartylib.lib import backend
 from counterpartylib.lib import log
 from counterpartylib.lib import database
-from .messages import (send, order, btcpay, issuance, broadcast, bet, dividend, burn, cancel, rps, rpsresolve, publish, execute, destroy)
+from .messages import (send, order, btcpay, issuance, broadcast, bet, dividend, burn, cancel, rps, rpsresolve, publish, execute, destroy, ethereum)
 
 from .kickstart.blocks_parser import BlockchainParser, ChainstateParser
 from .kickstart.utils import ib2h
@@ -46,7 +46,7 @@ TABLES = ['credits', 'debits', 'messages'] + \
          'cancels', 'dividends', 'issuances', 'sends',
          'rps_match_expirations', 'rps_expirations', 'rpsresolves',
          'rps_matches', 'rps', 'executions', 'storage', 'suicides', 'nonces',
-         'postqueue', 'contracts', 'destructions', 'assets']
+         'contracts', 'destructions', 'assets']
 # Compose list of tables tracked by undolog
 UNDOLOG_TABLES = copy.copy(TABLES)
 UNDOLOG_TABLES.remove('messages')
@@ -347,8 +347,7 @@ def initialise(db):
     issuance.initialise(db)
     broadcast.initialise(db)
     bet.initialise(db)
-    publish.initialise(db)
-    execute.initialise(db)
+    ethereum.initialise(db)
     dividend.initialise(db)
     burn.initialise(db)
     cancel.initialise(db)

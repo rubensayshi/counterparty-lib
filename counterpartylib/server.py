@@ -85,7 +85,7 @@ def initialise(database_file=None, log_file=None, api_log_file=None,
                 rpc_batch_size=config.DEFAULT_RPC_BATCH_SIZE,
                 check_asset_conservation=config.DEFAULT_CHECK_ASSET_CONSERVATION,
                 backend_ssl_verify=None, rpc_allow_cors=None,
-                verify_old_hash=None, verify_checkpoints=None
+                verify_old_hash=None, verify_checkpoints=None,
                 p2sh_dust_return_pubkey=None):
 
      # Data directory

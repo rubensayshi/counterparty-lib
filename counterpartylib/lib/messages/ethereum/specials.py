@@ -1,16 +1,21 @@
 # -*- coding: utf8 -*-
-import bitcoin
-from ethereum import utils, opcodes
-from ethereum.utils import safe_ord, decode_hex
+
+# @TODO
+# import bitcoin
+
+from ..ethereum import ethutils as utils, opcodes
+from .ethutils import safe_ord, decode_hex
 from rlp.utils import ascii_chr
 
-try:
-    from c_secp256k1 import ecdsa_recover_raw
-except ImportError:
-    import warnings
-    warnings.warn('missing c_secp256k1 falling back to pybitcointools')
 
-    from bitcoin import ecdsa_raw_recover as ecdsa_recover_raw
+# @TODO
+# try:
+#     from c_secp256k1 import ecdsa_recover_raw
+# except ImportError:
+#     import warnings
+#     warnings.warn('missing c_secp256k1 falling back to pybitcointools')
+#
+#     from bitcoin import ecdsa_raw_recover as ecdsa_recover_raw
 
 
 ZERO_PRIVKEY_ADDR = decode_hex('3f17f1962b36e491b30a40b2405849e597ba5fb5')
