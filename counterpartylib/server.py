@@ -2,6 +2,7 @@
 
 import os
 import decimal
+import pprint
 import sys
 import logging
 logger = logging.getLogger(__name__)
@@ -360,7 +361,6 @@ def connect_to_backend():
 
 
 def start_all(db):
-
     # Backend.
     connect_to_backend()
 
@@ -385,6 +385,37 @@ def reparse(db, block_index=None):
 
 def kickstart(db, bitcoind_dir):
     blocks.kickstart(db, bitcoind_dir=bitcoind_dir)
+
+
+def checkpoints(db):
+    if config.TESTNET:
+        net = 'TESTNET'
+        first_block_index = config.BLOCK_FIRST_TESTNET
+        current_checkpoints = check.CHECKPOINTS_TESTNET
+    else:
+        net = 'MAINNET'
+        first_block_index = config.BLOCK_FIRST_MAINNET
+        current_checkpoints = check.CHECKPOINTS_MAINNET
+
+    cursor = db.cursor()
+    result = {}
+    for block_index, checkpoint in current_checkpoints.items():
+        block = list(cursor.execute('''SELECT * FROM blocks WHERE block_index = ?''', (block_index, )))[0]
+        result[block_index] = {
+            'ledger_hash': block['ledger_hash'],
+            'txlist_hash': block['txlist_hash'],
+        }
+
+    cursor.close()
+
+    # apply some formatting to make it look nice and diff well
+    output = pprint.pformat(result, indent=4)
+    output = output.replace("{   %d: {" % first_block_index, "{\n    config.BLOCK_FIRST_%s: {" % net)
+    output = output.replace("   'ledger_hash'", "'ledger_hash'")
+    output = output.replace("   'txlist_hash'", "'txlist_hash'")
+    output = output.replace("}}", "},\n}")
+
+    print(output)
 
 
 def generate_move_random_hash(move):
