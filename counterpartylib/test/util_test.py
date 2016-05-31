@@ -80,6 +80,7 @@ def reset_current_block_index(db):
 
 def dump_database(db):
     """Create a new database dump from db object as input."""
+
     # TEMPORARY
     # .dump command bugs when aspw.Shell is used with 'db' args instead 'args'
     # but this way stay 20x faster than running scenario with file db
@@ -337,8 +338,9 @@ def vector_to_args(vector, functions=[]):
                 outputs = params.get('out', None)
                 records = params.get('records', None)
                 comment = params.get('comment', None)
+                skip = params.get('skip', False)
                 mock_protocol_changes = params.get('mock_protocol_changes', None)
-                if functions == [] or (tx_name + '.' + method) in functions:
+                if not skip and (functions == [] or (tx_name + '.' + method) in functions):
                     args.append((tx_name, method, params['in'], outputs, error, records, comment, mock_protocol_changes))
     return args
 
