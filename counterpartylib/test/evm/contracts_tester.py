@@ -37,12 +37,6 @@ languages = {}
 languages['solidity'] = solidity.get_solidity()
 languages['serpent'] = serpent
 
-# hack cuz eth/serpent tries to json.loads(bytes[])
-languages['serpent'].mk_full_signature = lambda code, **kwargs: \
-    json.loads(serpent.bytestostr(serpent.pyext.mk_full_signature(serpent.strtobytes(serpent.pre_transform(code, kwargs)))))
-# languages['solidity'].mk_full_signature = lambda code, **kwargs: \
-#     json.loads(serpent.bytestostr(serpent.pyext.mk_full_signature(serpent.strtobytes(serpent.pre_transform(code, kwargs)))))
-
 logger = logging.getLogger(__name__)
 
 def encode_datalist(vals):

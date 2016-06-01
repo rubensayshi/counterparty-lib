@@ -6,6 +6,9 @@ import binascii
 import yaml  # use yaml instead of json to get non unicode
 
 
+COMPILER_VERSION = None
+
+
 class CompileError(Exception):
     pass
 
@@ -104,10 +107,16 @@ class solc_wrapper(object):
 
     @classmethod
     def compiler_version(cls):
+        global COMPILER_VERSION
+
+        if COMPILER_VERSION is not None:
+            return COMPILER_VERSION
+
         version_info = subprocess.check_output(['solc', '--version'])
-        match = re.search("^Version: ([0-9a-z.-]+)/", version_info.decode('utf-8'), re.MULTILINE)
-        if match:
-            return match.group(1)
+        match = re.search("^Version: ([0-9a-z.\-\*]+)/", version_info.decode('utf-8'), re.MULTILINE)
+
+        COMPILER_VERSION = match.group(1) if match else False
+        return COMPILER_VERSION
 
     @classmethod
     def compile_rich(cls, code, path=None):
