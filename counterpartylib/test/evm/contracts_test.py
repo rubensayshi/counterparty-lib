@@ -79,8 +79,8 @@ def main(a,b):
 
 def test_evm():
     evm_code = serpent.compile(serpent_code)
-    translator = abi.ContractTranslator(serpent.mk_full_signature(
-        serpent_code))
+
+    translator = abi.ContractTranslator(serpent.mk_full_signature(serpent_code))
     data = translator.encode('main', [2, 5])
     s = state()
     c = s.evm(evm_code)
