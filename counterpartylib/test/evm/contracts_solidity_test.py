@@ -96,9 +96,7 @@ contract testme {
 
 
 
-# Test Serpent's import mechanism
-
-
+# Test import mechanism
 def test_returnten():
     mul2_code = '''
 contract mul2 {
@@ -124,91 +122,66 @@ contract testme {
     assert c.main() == 10
 
 
-# Test inset
-
-inset_inner_code = \
-    '''
-def g(n):
-    return(n + 10)
-
-def f(n):
-    return n*2
+# Test inherit
+def test_inherit():
+    mul2_code = '''
+contract mul2 {
+    function double(uint v) returns (uint) {
+        return v * 2;
+    }
+}
 '''
+    filename = "mul2_qwertyuioplkjhgfdsa.sol"
 
-filename2 = "inner_qwertyuioplkjhgfdsa.se"
+    returnten_code = '''
+import "%s";
 
-inset_outer_code = \
-    '''
-inset("%s")
-
-def foo():
-    res = self.g(12)
-    return res
-''' % filename2
-
-
-def test_inset():
+contract testme is mul2 {
+    function main() returns (uint) {
+        return double(5);
+    }
+}''' % filename
     s = state()
-    open_cleanonteardown(filename2, 'w').write(inset_inner_code)
-    c = s.abi_contract(inset_outer_code)
-    assert c.foo() == 22
-    os.remove(filename2)
-
-
-# Inset at the end instead
-
-inset_inner_code2 = \
-    '''
-def g(n):
-    return(n + 10)
-
-def f(n):
-    return n*2
-'''
-
-filename25 = "inner_qwertyuioplkjhgfdsa.se"
-
-inset_outer_code2 = \
-    '''
-
-def foo():
-    res = self.g(12)
-    return res
-
-inset("%s")
-''' % filename25
-
-
-def test_inset2():
-    s = state()
-    open_cleanonteardown(filename25, 'w').write(inset_inner_code2)
-    c = s.abi_contract(inset_outer_code2)
-    assert c.foo() == 22
-    os.remove(filename25)
+    open_cleanonteardown(filename, 'w').write(mul2_code)
+    c = s.abi_contract(returnten_code, language='solidity')
+    assert c.main() == 10
 
 
 # Test a simple namecoin implementation
+def test_namecoin():
+    namecoin_code = '''
+contract namecoin {
+    mapping(string => uint) data;
 
-namecoin_code = \
-    '''
-def main(k, v):
-    if !self.storage[k]:
-        self.storage[k] = v
-        return(1)
-    else:
-        return(0)
+    function set(string k, uint v) returns (uint) {
+        if (data[k] == 0) {
+            data[k] = v;
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    function get(string k) returns (uint) {
+        return data[k];
+    }
+}
 '''
 
-
-def test_namecoin():
     s = state()
-    c = s.abi_contract(namecoin_code)
-    o1 = c.main("george", 45)
+    c = s.abi_contract(namecoin_code, language='solidity')
+
+    o1 = c.set("george", 45)
     assert o1 == 1
-    o2 = c.main("george", 20)
+    assert c.get("george")
+
+    o2 = c.set("george", 20)
     assert o2 == 0
-    o3 = c.main("harry", 60)
+    assert c.get("george")
+
+    o3 = c.set("harry", 60)
     assert o3 == 1
+    assert c.get("harry")
 
 
 # Test a simple text return (test not originally in pyeth)
