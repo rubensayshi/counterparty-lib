@@ -14,6 +14,9 @@ from counterpartylib.lib.evm import (blocks, processblock, ethutils, abi, addres
 
 from counterpartylib.test.evm import contracts_tester as tester
 from counterpartylib.test import util_test
+from counterpartylib.lib.evm.solidity import get_solidity
+
+solidity = get_solidity()
 
 # globals initialized by setup_function
 db, cursor, logger = None, None, None
@@ -72,17 +75,18 @@ def open_cleanonteardown(filename, *args, **kwargs):
     return open(filename, *args, **kwargs)
 
 
-# Test EVM contracts
-def test_evm():
-    serpent_code = '''
-def main(a,b):
-    return(a ^ b)
+def test_evm1():
+    code = '''
+contract testme {
+    function main(uint a, uint b) returns (uint) {
+        return a ** b;
+    }
+}
 '''
 
-    evm_code = serpent.compile(serpent_code)
-    pprint.pprint(vm.preprocess_code(evm_code))
+    evm_code = solidity.compile(code)
 
-    translator = abi.ContractTranslator(serpent.mk_full_signature(serpent_code))
+    translator = abi.ContractTranslator(solidity.mk_full_signature(code))
     data = translator.encode('main', [2, 5])
     s = state()
     c = s.evm(evm_code)
@@ -91,112 +95,33 @@ def main(a,b):
     assert c.main(2, 5) == 32
 
 
-# Test serpent compilation of variables using _with_, doing a simple
-# arithmetic calculation 20 * 30 + 10 = 610
-sixten_code = \
-    '''
-(with 'x 10
-    (with 'y 20
-        (with 'z 30
-            (seq
-                (set 'a (add (mul (get 'y) (get 'z)) (get 'x)))
-                (return (ref 'a) 32)
-            )
-        )
-    )
-)
-'''
-
-
-def test_sixten():
-    """no idea why, but this tests _lll"""
-    s = state()
-
-    # mock tx
-    tx, tx_obj, block_obj = s.mock_tx(tester.a0, tester.a1, 0, b'')
-
-    # set code for contract
-    s.block.set_code(tx_obj, tester.a1, tester.serpent.compile_lll(sixten_code))
-    o1 = s.send(tester.k0, tester.a1, 0)
-    assert ethutils.big_endian_to_int(o1) == 610
-
-
-with_code = \
-    """
-def f1():
-    o = array(4)
-    with x = 5:
-        o[0] = x
-        with y = 7:
-            o[1] = y
-            with x = 8:
-                o[2] = x
-        o[3] = x
-    return(o:arr)
-
-
-def f2():
-    with x = 5:
-        with y = 7:
-            x = 2
-        return(x)
-
-def f3():
-    with x = 5:
-        with y = seq(x = 7, 2):
-            return(x)
-
-def f4():
-    o = array(4)
-    with x = 5:
-        o[0] = x
-        with y = 7:
-            o[1] = y
-            with x = x:
-                o[2] = x
-                with y = x:
-                    o[3] = y
-    return(o:arr)
-"""
-
-
-def test_with():
-    s = state()
-    c = s.abi_contract(with_code)
-    assert c.f1() == [5, 7, 8, 5]
-    assert c.f2() == 2
-    assert c.f3() == 7
-    assert c.f4() == [5, 7, 5, 5]
-
 
 # Test Serpent's import mechanism
 
-mul2_code = \
-    '''
-def double(v):
-    log(v)
-    return(v*2)
-'''
-
-filename = "mul2_qwertyuioplkjhgfdsa.se"
-
-returnten_code = \
-    '''
-extern mul2: [double:i]
-
-x = create("%s")
-log(x)
-return(x.double(5))
-''' % filename
-
 
 def test_returnten():
+    mul2_code = '''
+contract mul2 {
+    function double(uint v) returns (uint) {
+        return v * 2;
+    }
+}
+'''
+    filename = "mul2_qwertyuioplkjhgfdsa.sol"
+
+    returnten_code = '''
+import "%s";
+
+contract testme {
+    function main() returns (uint) {
+        mul2 x = new mul2();
+        return x.double(5);
+    }
+}''' % filename
     s = state()
     open_cleanonteardown(filename, 'w').write(mul2_code)
-    c = s.contract(returnten_code)
-    o1 = s.send(tester.k0, c, 0)
-    os.remove(filename)
-    assert ethutils.big_endian_to_int(o1) == 10
+    c = s.abi_contract(returnten_code, language='solidity')
+    assert c.main() == 10
 
 
 # Test inset
