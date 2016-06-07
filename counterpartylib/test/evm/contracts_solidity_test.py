@@ -199,6 +199,40 @@ contract testme {
     assert c.main() == 10
 
 
+def test_this_call():
+    """test the difference between `this.fn()` and `fn()`; `this.fn()` should use `CALL`, which costs more gas"""
+    returnten_code = '''
+contract testme {
+    address mymul2;
+
+    function setmul2(address _mul2) {
+        mymul2 = _mul2;
+    }
+
+    function double(uint v) returns (uint) {
+        return v * 2;
+    }
+
+    function doubleexternal() returns (uint) {
+        return this.double(5);
+    }
+
+    function doubleinternal() returns (uint) {
+        return double(5);
+    }
+}'''
+    s = state()
+
+    c = s.abi_contract(returnten_code, sender=tester.k0, language='solidity')
+    b = s.block.get_balance(tester.k0)
+    assert c.doubleexternal() == 10
+    assert b - s.block.get_balance(tester.k0) == 21868  # gas used
+
+    b = s.block.get_balance(tester.k0)
+    assert c.doubleinternal() == 10
+    assert b - s.block.get_balance(tester.k0) == 21501  # gas used
+
+
 # Test inherit
 def test_constructor_args():
     mul2_code = '''
@@ -528,196 +562,181 @@ contract testme {
 
 
 # Test the LIFO nature of call
-arither_code = '''
-def init():
-    self.storage[0] = 10
+def test_lifo():
+    arither_code = '''
+contract testme {
+    uint r;
 
-def f1():
-    self.storage[0] += 1
+    function testme() {
+        r = 10;
+    }
 
-def f2():
-    self.storage[0] *= 10
-    self.f1()
-    self.storage[0] *= 10
+    function f1() {
+        r += 1;
+    }
 
-def f3():
-    return(self.storage[0])
+    function f2() {
+        r *= 10;
+        f1();
+        r *= 10;
+    }
+
+    function f3() returns (uint) {
+        return r;
+    }
+}
 '''
 
-
-def test_lifo():
     s = state()
-    c = s.abi_contract(arither_code)
+    c = s.abi_contract(arither_code, language='solidity')
     c.f2()
     assert c.f3() == 1010
 
 
-# Test suicides and suicide reverts
-suicider_code = '''
-data creator
+def test_oog():
+    contract_code = '''
+contract testme {
+    mapping(uint => uint) data;
 
-def init():
-    self.creator = msg.sender
+    function loop(uint rounds) returns (uint) {
+        uint i = 0;
+        while (i < rounds) {
+            data[i] = i;
+            i++;
+        }
 
-def mainloop(rounds):
-    self.storage[15] = 40
-    self.suicide()
-    i = 0
-    while i < rounds:
-        i += 1
-        self.storage[i] = i
-    return(i)
-
-def entry(rounds):
-    self.storage[15] = 20
-    return self.mainloop(rounds, gas=msg.gas - 600)
-
-def ping_ten():
-    return(10)
-
-def suicide():
-    suicide(self.creator)
-
-def ping_storage15():
-    return(self.storage[15])
+        return i;
+    }
+}
 '''
-
-
-def test_suicider():
     s = state()
+    c = s.abi_contract(contract_code, language='solidity')
+    assert c.loop(5) == 5
 
-    c = s.abi_contract(suicider_code)
-    # Run normally: suicide processes, so the attempt to ping the contract fails
-    assert c.entry(5) == 5
-    o2 = c.ping_ten()
-    assert o2 is None
-
-    c = s.abi_contract(suicider_code)
-    # Run the suicider in such a way that it suicides in a sub-call,
-    # then runs out of gas, leading to a revert of the suicide and the storage mutation
-    o1 = c.entry(8000)
-    assert o1 == 0
-
-    # Check that the suicide got reverted and the contract still works
-    o2 = c.ping_ten()
-    assert o2 == 10
-    # Check that the storage op got reverted and the contract still works
-    o3 = c.ping_storage15()
-    assert o3 == 20
+    e = None
+    try:
+        c.loop(500)
+    except tester.TransactionFailed as _e:
+        e = _e
+    assert e and isinstance(e, tester.TransactionFailed)
 
 
-# Test reverts
+def test_subcall_suicider():
+    internal_code = '''
+contract testmeinternal {
+    address creator;
+    uint r;
 
-reverter_code = '''
-def entry():
-    self.non_recurse(gas=100000)
-    self.recurse(gas=100000)
+    function testmeinternal() {
+        creator = msg.sender;
+    }
 
-def non_recurse():
-    send(%s, 9)
-    self.storage[8080] = 4040
-    self.storage[160160] = 2020
+    function set(uint v) {
+        r = v;
+    }
 
-def recurse():
-    send(%s, 9)
-    self.storage[8081] = 4039
-    self.storage[160161] = 2019
-    self.recurse()
-    while msg.gas > 0:
-        self.storage["waste_some_gas"] = 0
+    function get() returns (uint) {
+        return r;
+    }
+
+    function killme() {
+        selfdestruct(creator);
+    }
+}
 '''
+    external_code = '''
+contract testme {
+    address subcontract;
+    mapping(uint => uint) data;
 
+    function testme(address _subcontract) {
+        subcontract = _subcontract;
+    }
 
-def test_reverter():
-    a1 = address.Address.normalize(tester.a1)
-    a2 = address.Address.normalize(tester.a2)
+    function killandloop(uint rounds) returns (uint) {
+        testmeinternal(subcontract).killme();
+        return loop(rounds);
+    }
+
+    function loop(uint rounds) returns (uint) {
+        uint i = 0;
+        while (i < rounds) {
+            i++;
+            data[i] = i;
+        }
+
+        return i;
+    }
+}
+'''
 
     s = state()
 
-    # get balances before contracts
-    a1b = s.block.get_balance(a1.base58())
-    a2b = s.block.get_balance(a2.base58())
+    # test normal suicide path
+    internal = s.abi_contract(internal_code, language='solidity')
+    external = s.abi_contract(internal_code + "\n" + external_code, constructor_parameters=[internal.address], language='solidity')
+    internal.set(60)
+    assert internal.get() == 60
+    assert external.killandloop(10) == 10
+    assert internal.get() is None
 
-    c = s.abi_contract(reverter_code % (a1.int(), a2.int()), endowment=100000)
-    c.entry()
-    assert s.block.get_storage_data(c.address, 8080) == 4040
-    assert s.block.get_balance(tester.a1) == a1b + 9
-    assert s.block.get_storage_data(c.address, 8081) == 0
-    assert s.block.get_balance(tester.a2) == a2b + 0
+    # test suicide -> oog path, shouldn't suicide
+    internal = s.abi_contract(internal_code, language='solidity')
+    external = s.abi_contract(internal_code + "\n" + external_code, constructor_parameters=[internal.address], language='solidity')
+    internal.set(60)
+    assert internal.get() == 60
 
-
-# Test stateless contracts
-
-add1_code = \
-    '''
-def main(x):
-    self.storage[1] += x
-'''
-
-filename3 = "stateless_qwertyuioplkjhgfdsa.se"
-
-callcode_test_code = \
-    '''
-extern add1: [main:i]
-
-x = create("%s")
-x.main(6)
-x.main(4, call=code)
-x.main(60, call=code)
-x.main(40)
-return(self.storage[1])
-''' % filename3
-
-
-def test_callcode():
-    s = state()
-    open_cleanonteardown(filename3, 'w').write(add1_code)
-    c = s.contract(callcode_test_code)
-    o1 = s.send(tester.k0, c, 0)
-
-    assert ethutils.big_endian_to_int(o1) == 64
-
-
-# https://github.com/ethereum/serpent/issues/8
-array_code = '''
-def main():
-    a = array(1)
-    a[0] = 1
-    return(a, items=1)
-'''
+    e = None
+    try:
+        external.killandloop(500)
+    except tester.TransactionFailed as _e:
+        e = _e
+    assert e and isinstance(e, tester.TransactionFailed)
+    assert internal.get() == 60
 
 
 def test_array():
+    array_code = '''
+contract testme {
+    function main() returns (uint[]) {
+        uint[] memory a = new uint[](1);
+        a[0] = 1;
+        return a;
+    }
+}
+'''
     s = state()
-    c = s.abi_contract(array_code)
+    c = s.abi_contract(array_code, language='solidity')
     assert c.main() == [1]
 
-
-array_code2 = '''
-def main():
-    a = array(1)
-    something = 2
-    a[0] = 1
-    return(a, items=1)
-'''
 
 
 def test_array2():
-    s = state()
-    c = s.abi_contract(array_code2)
-    assert c.main() == [1]
-
-
-array_code3 = """
-def main():
-    a = array(3)
-    return(a, items=3)
+    array_code2 = """
+contract testme {
+    function main() returns (uint[3]) {
+        uint[3] memory a;
+        return a;
+    }
+}
 """
+    s = state()
+    c = s.abi_contract(array_code2, language='solidity')
+    assert c.main() == [0, 0, 0]
+
 
 
 def test_array3():
+    array_code3 = """
+contract testme {
+    function main() returns (uint[]) {
+        uint[] memory a = new uint[](3);
+        return a;
+    }
+}
+"""
     s = state()
-    c = s.abi_contract(array_code3)
+    c = s.abi_contract(array_code3, language='solidity')
     assert c.main() == [0, 0, 0]
 
 
