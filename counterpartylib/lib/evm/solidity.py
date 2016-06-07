@@ -91,7 +91,7 @@ class solc_wrapper(object):
             p.terminate()
 
         if p.returncode:
-            raise CompileError('compilation failed: %s' % stderrdata)
+            raise CompileError('compilation failed: %s' % str(stderrdata).replace('\\n', '\n'))
 
         # contracts = json.loads(stdoutdata)['contracts']
         contracts = yaml.safe_load(stdoutdata)['contracts']

@@ -69,6 +69,10 @@ class Address(object):
         return self.base58()
 
     @classmethod
+    def nulladdress(cls):
+        return cls(b'\x00' * DATA_LENGTH, config.CONTRACT_ADDRESSVERSION)
+
+    @classmethod
     def normalizedata(cls, data):
         if isinstance(data, str):
             raise NotImplemented
