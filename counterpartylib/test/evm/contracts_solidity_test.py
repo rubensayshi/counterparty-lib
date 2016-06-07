@@ -84,16 +84,33 @@ contract testme {
 }
 '''
 
-    evm_code = solidity.compile(code)
-
     translator = abi.ContractTranslator(solidity.mk_full_signature(code))
-    data = translator.encode('main', [2, 5])
     s = state()
-    c = s.evm(evm_code)
-    o = translator.decode('main', s.send(tester.k0, c, 0, data))
-    assert o == [32]
+    c = s.abi_contract(code, language='solidity')
     assert c.main(2, 5) == 32
 
+
+def test_constructor():
+    contract_code = '''
+contract testme {
+    uint cnt;
+
+    function testme() {
+        cnt = 10;
+    }
+
+    function ping() returns (uint) {
+        cnt = cnt + 1;
+        return cnt;
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(contract_code, language='solidity')
+
+    assert c.ping() == 11;
+    assert c.ping() == 12;
 
 
 # Test import mechanism
@@ -179,6 +196,40 @@ contract testme {
     c = s.abi_contract(returnten_code, language='solidity')
 
     c.setmul2(c1.address)
+    assert c.main() == 10
+
+
+# Test inherit
+def test_constructor_args():
+    mul2_code = '''
+contract mul2 {
+    function double(uint v) returns (uint) {
+        return v * 2;
+    }
+}
+'''
+    filename = "mul2_qwertyuioplkjhgfdsa.sol"
+
+    returnten_code = '''
+import "%s";
+
+contract testme {
+    address mymul2;
+
+    function testme(address _mul2) {
+        mymul2 = _mul2;
+    }
+
+    function main() returns (uint) {
+        return mul2(mymul2).double(5);
+    }
+}''' % filename
+    s = state()
+    open_cleanonteardown(filename, 'w').write(mul2_code)
+
+    c1 = s.abi_contract(mul2_code, language='solidity')
+    c = s.abi_contract(returnten_code, constructor_parameters=[c1.address], language='solidity')
+
     assert c.main() == 10
 
 
@@ -292,29 +343,6 @@ contract testme {
     v = 30000  # v = for the contract, amount we get back
     c.send(v, value=10000000, sender=tester.a1)
     assert s.block.get_balance(tester.a2) == startbalance + v
-
-
-def test_constructor():
-    contract_code = '''
-contract testme {
-    uint cnt;
-
-    function testme() {
-        cnt = 10;
-    }
-
-    function ping() returns (uint) {
-        cnt = cnt + 1;
-        return cnt;
-    }
-}
-'''
-
-    s = state()
-    c = s.abi_contract(contract_code, language='solidity')
-
-    assert c.ping() == 11;
-    assert c.ping() == 12;
 
 
 # Test a simple currency implementation
