@@ -147,6 +147,41 @@ contract testme is mul2 {
     assert c.main() == 10
 
 
+# Test inherit
+def test_external():
+    mul2_code = '''
+contract mul2 {
+    function double(uint v) returns (uint) {
+        return v * 2;
+    }
+}
+'''
+    filename = "mul2_qwertyuioplkjhgfdsa.sol"
+
+    returnten_code = '''
+import "%s";
+
+contract testme {
+    address mymul2;
+
+    function setmul2(address _mul2) {
+        mymul2 = _mul2;
+    }
+
+    function main() returns (uint) {
+        return mul2(mymul2).double(5);
+    }
+}''' % filename
+    s = state()
+    open_cleanonteardown(filename, 'w').write(mul2_code)
+
+    c1 = s.abi_contract(mul2_code, language='solidity')
+    c = s.abi_contract(returnten_code, language='solidity')
+
+    c.setmul2(c1.address)
+    assert c.main() == 10
+
+
 # Test a simple namecoin implementation
 def test_namecoin():
     namecoin_code = '''
@@ -184,53 +219,53 @@ contract namecoin {
     assert c.get("harry")
 
 
-# Test a simple text return (test not originally in pyeth)
-simple_text_return_code = '''
-def returntext(v):
-    return(text("testing123"):str)
+# Test a simple text return
+def test_simple_text_return():
+    simple_text_return_code = '''
+contract testme {
+    function returntext() returns (string) {
+        return "testing123";
+    }
+}
 '''
 
-
-def test_simple_text_return():
     s = state()
-    c = s.abi_contract(simple_text_return_code)
-
+    c = s.abi_contract(simple_text_return_code, language='solidity')
     assert c.returntext() == bytes("testing123", "utf8")
 
 
-# Test a simple send (test not originally in pyeth)
-send_code = '''
-def send(v):
-    send(msg.sender, v)
+# Test a simple send
+def test_send():
+    send_code = '''
+contract testme {
+    function send(uint v) {
+        msg.sender.send(v);
+    }
+}
 '''
 
-
-def test_send():
     s = state()
-    c = s.abi_contract(send_code)
+    c = s.abi_contract(send_code, language='solidity')
 
     startbalance = s.block.get_balance(tester.a2)
     value = 1000000  # amount send into the contract
     v = 30000  # v= for the contract, amount we get back
-    gcost = 53356  # gascost
+    gcost = 53408  # gascost
     c.send(v, value=value, sender=tester.a2)
     assert s.block.get_balance(tester.a2) == startbalance - gcost - value + v
 
 
-# Test a simple send to hardcoded address (test not originally in pyeth)
-send_arg_code = '''
-def send(s:address, v):
-    send(s, v)
+def test_send_arg():
+    send_arg_code = '''
+contract testme {
+    function send(address s, uint v) {
+        s.send(v);
+    }
+}
 '''
 
-
-def test_send_arg():
-    a2 = address.Address.normalize(tester.a2)
-
     s = state()
-    c = s.abi_contract(send_arg_code)
-
-    logger.warn(a2.int())
+    c = s.abi_contract(send_arg_code, language='solidity')
 
     startbalance = s.block.get_balance(tester.a2)
     v = 30000  # v = for the contract, amount we get back
@@ -238,18 +273,20 @@ def test_send_arg():
     assert s.block.get_balance(tester.a2) == startbalance + v
 
 
-# Test a simple send to hardcoded address (test not originally in pyeth)
-send_hardcoded_code = '''
-def send(v):
-    send(%s, v)
+def test_send_hardcoded():
+    send_hardcoded_code = '''
+contract testme {
+    function send(uint v) {
+        address s = address(%s);
+        s.send(v);
+    }
+}
 '''
 
-
-def test_send_hardcoded():
     a2 = address.Address.normalize(tester.a2)
 
     s = state()
-    c = s.abi_contract(send_hardcoded_code % (a2.int(), ))
+    c = s.abi_contract(send_hardcoded_code % (a2.int(), ), language='solidity')
 
     startbalance = s.block.get_balance(tester.a2)
     v = 30000  # v = for the contract, amount we get back
@@ -257,33 +294,60 @@ def test_send_hardcoded():
     assert s.block.get_balance(tester.a2) == startbalance + v
 
 
-# Test a simple currency implementation
+def test_constructor():
+    contract_code = '''
+contract testme {
+    uint cnt;
 
-currency_code = '''
-data balances[2^160]
+    function testme() {
+        cnt = 10;
+    }
 
-def init():
-    self.balances[msg.sender] = 1000
-
-def query(addr:address):
-    return(self.balances[addr])
-
-def send(to:address, value):
-    from = msg.sender
-    fromvalue = self.balances[from]
-    if fromvalue >= value:
-        self.balances[from] = fromvalue - value
-        self.balances[to] = self.balances[to] + value
-        log(from, to, value)
-        return(1)
-    else:
-        return(0)
+    function ping() returns (uint) {
+        cnt = cnt + 1;
+        return cnt;
+    }
+}
 '''
 
-
-def test_currency():
     s = state()
-    c = s.abi_contract(currency_code, sender=tester.k0)
+    c = s.abi_contract(contract_code, language='solidity')
+
+    assert c.ping() == 11;
+    assert c.ping() == 12;
+
+
+# Test a simple currency implementation
+def test_currency():
+    currency_code = '''
+contract testme {
+    mapping(address => uint) balances;
+
+    function testme() {
+        balances[msg.sender] = 1000;
+    }
+
+    function query(address a) returns (uint) {
+        return balances[a];
+    }
+
+    function send(address to, uint value) returns (uint) {
+        address from = msg.sender;
+
+        if (balances[msg.sender] >= value) {
+            balances[msg.sender] = balances[msg.sender] - value;
+            balances[to] = balances[to] + value;
+
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(currency_code, sender=tester.k0, language='solidity')
 
     o1 = c.query(tester.k0)
     assert o1 == 1000
@@ -298,33 +362,37 @@ def test_currency():
 
 
 # Test a data feed
-
 data_feed_code = '''
-data creator
-data values[]
+contract datafeedContract {
+    address creator;
+    mapping(uint => uint) values;
 
+    function datafeedContract() {
+        creator = msg.sender;
+    }
 
-def init():
-    self.creator = msg.sender
+    function set(uint k, uint v) returns (uint) {
+        if (msg.sender == creator) {
+            values[k] = v;
+            return 1;
+        } else {
+            return 0;
+        }
+    }
 
-def set(k, v):
-    if msg.sender == self.creator:
-        self.values[k] = v
-        return(1)
-    else:
-        return(0)
-
-def get(k):
-    return(self.values[k])
+    function get(uint k) returns (uint) {
+        return values[k];
+    }
+}
 '''
 
 
 def test_data_feeds():
     s = state()
-    c = s.abi_contract(data_feed_code, sender=tester.k0)
+    c = s.abi_contract(data_feed_code, sender=tester.k0, language='solidity')
     o2 = c.get(500)
     assert o2 == 0
-    o3 = c.set(500, 19)
+    o3 = c.set(500, 19, sender=tester.k0)
     assert o3 == 1
     o4 = c.get(500)
     assert o4 == 19
@@ -335,57 +403,65 @@ def test_data_feeds():
     return s, c
 
 
-# Test an example hedging contract, using the data feed. This tests
-# contracts calling other contracts
-
-hedge_code = '''
-extern datafeed: [set:ii, get:i]
-
-data partyone
-data partytwo
-data hedgeValue
-data datafeed
-data index
-data fiatValue
-data maturity
-
-def main(datafeed, index):
-    if !self.partyone:
-        self.partyone = msg.sender
-        self.hedgeValue = msg.value
-        self.datafeed = datafeed
-        self.index = index
-        return(1)
-    elif !self.partytwo:
-        ethvalue = self.hedgeValue
-        if msg.value >= ethvalue:
-            self.partytwo = msg.sender
-        c = self.datafeed.get(self.index)
-        othervalue = ethvalue * c
-        self.fiatValue = othervalue
-        self.maturity = block.timestamp + 20000
-        return(othervalue)
-    else:
-        othervalue = self.fiatValue
-        ethvalue = othervalue / self.datafeed.get(self.index)
-        if ethvalue >= self.balance:
-            send(self.partyone, self.balance)
-            return(3)
-        elif block.timestamp > self.maturity:
-            send(self.partytwo, self.balance - ethvalue)
-            send(self.partyone, ethvalue)
-            return(4)
-        else:
-            return(5)
-'''
-
-
+# Test an example hedging contract, using the data feed.
+# This tests contracts calling other contracts
 def test_hedge():
+    hedge_code = '''
+%s
+
+contract testme {
+    address partyone;
+    address partytwo;
+    uint hedgeValue;
+    address datafeed;
+    uint index;
+    uint fiatValue;
+    uint maturity;
+
+    function main(address _datafeed, uint _index) returns (uint) {
+        // step 1; setup partyone
+        if (partyone == 0x0) {
+            partyone = msg.sender;
+            hedgeValue = msg.value;
+            datafeed = _datafeed;
+            index = _index;
+
+            return 1;
+        } else if (partytwo == 0x0) {
+            if (msg.value >= hedgeValue) {
+                partytwo = msg.sender;
+            }
+
+            uint c = datafeedContract(datafeed).get(index);
+            fiatValue = hedgeValue * c;
+            maturity = block.timestamp + 20000;
+
+            return fiatValue;
+        } else {
+            uint otherValue = fiatValue;
+            uint ethValue = otherValue / datafeedContract(datafeed).get(index);
+
+            if (ethValue > this.balance) {
+                partyone.send(this.balance);
+                return 3;
+            } else if (block.timestamp > maturity) {
+                partytwo.send(this.balance - ethValue);
+                partyone.send(ethValue);
+
+                return 4;
+            } else {
+                return 5;
+            }
+        }
+    }
+}
+''' % data_feed_code
+
     # run previous test to setup data feeds
     s, c = test_data_feeds()
 
     # create contract
-    c2 = s.abi_contract(hedge_code, sender=tester.k0)
+    c2 = s.abi_contract(hedge_code, sender=tester.k0, language='solidity')
 
     # Have the first party register, sending 10000000 XCPtoshi and asking for a hedge using currency code 500
     o1 = c2.main(c.address.int(), 500, value=10000000, sender=tester.k0)
@@ -394,7 +470,7 @@ def test_hedge():
     # Have the second party register.
     # It should receive the amount of units of the second currency that it is entitled to.
     # Note that from the previous test this is set to 726
-    o2 = c2.main(0, 0, value=10000000, sender=tester.k2)
+    o2 = c2.main(address.Address.nulladdress(), 0, value=10000000, sender=tester.k2)
     assert o2 == 7260000000
 
     # SNAPSHOT
@@ -405,21 +481,21 @@ def test_hedge():
     assert o3 == 1
 
     # Finalize the contract. Expect code 3, meaning a margin call
-    o4 = c2.main(0, 0)
+    o4 = c2.main(address.Address.nulladdress(), 0)
     assert o4 == 3
 
     # REVERT TO SNAPSHOT
     s.revert(snapshot)
 
     # Don't change the price. Finalize, and expect code 5, meaning the time has not expired yet
-    o5 = c2.main(0, 0)
+    o5 = c2.main(address.Address.nulladdress(), 0)
     assert o5 == 5
 
     # Mine 100 blocks
     s.mine(100, tester.a3)
 
     # Expect code 4, meaning a normal execution where both get their share
-    o6 = c2.main(0, 0)
+    o6 = c2.main(address.Address.nulladdress(), 0)
     assert o6 == 4
 
 
