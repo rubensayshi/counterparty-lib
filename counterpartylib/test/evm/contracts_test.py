@@ -10,7 +10,7 @@ from counterpartylib.test import conftest  # this is require near the top to do 
 from counterpartylib.test.util_test import CURR_DIR
 
 from counterpartylib.lib import (config, database)
-from counterpartylib.lib.evm import (blocks, processblock, ethutils, abi, address, vm)
+from counterpartylib.lib.evm import (blocks, processblock, ethutils, abi, address, vm, exceptions as ethexceptions)
 
 from counterpartylib.test.evm import contracts_tester as tester
 from counterpartylib.test import util_test
@@ -550,6 +550,26 @@ def test_lifo():
     assert c.f3() == 1010
 
 
+def test_oog():
+    contract_code = '''
+def loop(rounds):
+    i = 0
+    while i < rounds:
+        i += 1
+        self.storage[i] = i
+    return(i)
+'''
+    s = state()
+    c = s.abi_contract(contract_code)
+    assert c.loop(5) == 5
+    e = None
+    try:
+        c.loop(500)
+    except tester.TransactionFailed as _e:
+        e = _e
+    assert e and isinstance(e, tester.TransactionFailed)
+
+
 # Test suicides and suicide reverts
 suicider_code = '''
 data creator
@@ -621,8 +641,6 @@ def recurse():
     self.storage[8081] = 4039
     self.storage[160161] = 2019
     self.recurse()
-    while msg.gas > 0:
-        self.storage["waste_some_gas"] = 0
 '''
 
 
