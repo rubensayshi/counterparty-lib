@@ -1,3 +1,4 @@
+import hashlib
 import pprint
 
 import pytest
@@ -740,29 +741,37 @@ contract testme {
     assert c.main() == [0, 0, 0]
 
 
-calltest_code = """
-def main():
-    self.first(1, 2, 3, 4, 5)
-    self.second(2, 3, 4, 5, 6)
-    self.third(3, 4, 5, 6, 7)
+def test_calls():
+    calltest_code = """
+contract testme {
+    mapping(uint => uint) data;
 
-def first(a, b, c, d, e):
-    self.storage[1] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    function main() {
+        this.first(1, 2, 3, 4, 5);
+        this.second( 2, 3, 4, 5, 6);
+        this.third(3, 4, 5, 6, 7);
+    }
 
-def second(a, b, c, d, e):
-    self.storage[2] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    function first(uint a, uint b, uint c, uint d, uint e) {
+        data[1] = a * 10000 + b * 1000 + c * 100 + d * 10 + e;
+    }
 
-def third(a, b, c, d, e):
-    self.storage[3] = a * 10000 + b * 1000 + c * 100 + d * 10 + e
+    function second(uint a, uint b, uint c, uint d, uint e) {
+        data[2] = a * 10000 + b * 1000 + c * 100 + d * 10 + e;
+    }
 
-def get(k):
-    return(self.storage[k])
+    function third(uint a, uint b, uint c, uint d, uint e) {
+        data[3] = a * 10000 + b * 1000 + c * 100 + d * 10 + e;
+    }
+
+    function get(uint k) returns (uint) {
+        return data[k];
+    }
+}
 """
 
-
-def test_calls():
     s = state()
-    c = s.abi_contract(calltest_code)
+    c = s.abi_contract(calltest_code, language='solidity')
     c.main()
     assert 12345 == c.get(1)
     assert 23456 == c.get(2)
@@ -773,7 +782,8 @@ def test_calls():
     assert 56789 == c.get(2)
 
 
-storage_object_test_code = """
+def test_storage_objects():
+    storage_object_test_code = """
 extern moo: [ping, query_chessboard:ii, query_items:ii, query_person, query_stats:i, testping:ii, testping2:i]
 
 data chessboard[8][8]
@@ -831,11 +841,86 @@ def testping2(x):
     return(x*x)
 
 """
+    storage_object_test_code = """
+contract testme {
 
+    struct User {
+        uint health;
+        uint x;
+        uint y;
+        uint[5] items;
+    }
 
-def test_storage_objects():
+    struct Arm {
+        uint elbow;
+        uint[5] fingers;
+    }
+
+    struct Person {
+        uint head;
+        Arm[2] arms;
+        uint[2] legs;
+    }
+
+    uint[8][8] chessboard;
+    User[100] users;
+    Person person;
+
+    function ping() {
+        chessboard[0][0] = 1;
+        chessboard[0][1] = 2;
+        chessboard[3][0] = 3;
+        users[0].health = 100;
+        users[1].x = 15;
+        users[1].y = 12;
+        users[1].items[2] = 9;
+        users[80].health = 10;
+        users[80].items[3] = 11;
+        person.head = 555;
+        person.arms[0].elbow = 556;
+        person.arms[0].fingers[0] = 557;
+        person.arms[0].fingers[4] = 558;
+        person.legs[0] = 559;
+        person.arms[1].elbow = 656;
+        person.arms[1].fingers[0] = 657;
+        person.arms[1].fingers[4] = 658;
+        person.legs[1] = 659;
+        person.legs[1] += 1000;
+    }
+
+    function query_chessboard(uint x, uint y) returns (uint) {
+        return chessboard[x][y];
+    }
+
+    function query_stats(uint u) returns (uint, uint, uint) {
+        return (users[u].health, users[u].x, users[u].y);
+    }
+
+    function query_items(uint u, uint i) returns (uint) {
+        return users[u].items[i];
+    }
+
+    function query_person() returns (uint[15]) {
+        uint[15] a;
+        a[0] = person.head;
+        a[1] = person.arms[0].elbow;
+        a[2] = person.arms[1].elbow;
+        a[3] = person.legs[0];
+        a[4] = person.legs[1];
+
+        uint i = 0;
+        while (i < 5) {
+            a[5 + i] = person.arms[0].fingers[i];
+            a[10 + i] = person.arms[1].fingers[i];
+            i += 1;
+        }
+
+        return a;
+    }
+}
+"""
     s = state()
-    c = s.abi_contract(storage_object_test_code)
+    c = s.abi_contract(storage_object_test_code, language='solidity')
     c.ping()
     assert 1 == c.query_chessboard(0, 0)
     assert 2 == c.query_chessboard(0, 1)
@@ -848,185 +933,6 @@ def test_storage_objects():
     assert [555, 556, 656, 559, 1659,
             557, 0, 0, 0, 558,
             657, 0, 0, 0, 658] == c.query_person()
-    assert [361, 441] == c.testping(19, 21)
-
-
-infinite_storage_object_test_code = """
-data chessboard[][8]
-data users[100](health, x, y, items[])
-data person(head, arms[](elbow, fingers[5]), legs[2])
-
-def ping():
-    self.chessboard[0][0] = 1
-    self.chessboard[0][1] = 2
-    self.chessboard[3][0] = 3
-    self.users[0].health = 100
-    self.users[1].x = 15
-    self.users[1].y = 12
-    self.users[1].items[2] = 9
-    self.person.head = 555
-    self.person.arms[0].elbow = 556
-    self.person.arms[0].fingers[0] = 557
-    self.person.arms[0].fingers[4] = 558
-    self.person.legs[0] = 559
-    self.person.arms[1].elbow = 656
-    self.person.arms[1].fingers[0] = 657
-    self.person.arms[1].fingers[4] = 658
-    self.person.legs[1] = 659
-    self.person.legs[1] += 1000
-
-def query_chessboard(x, y):
-    return(self.chessboard[x][y])
-
-def query_stats(u):
-    return([self.users[u].health, self.users[u].x, self.users[u].y]:arr)
-
-def query_items(u, i):
-    return(self.users[u].items[i])
-
-def query_person():
-    a = array(15)
-    a[0] = self.person.head
-    a[1] = self.person.arms[0].elbow
-    a[2] = self.person.arms[1].elbow
-    a[3] = self.person.legs[0]
-    a[4] = self.person.legs[1]
-    i = 0
-    while i < 5:
-        a[5 + i] = self.person.arms[0].fingers[i]
-        a[10 + i] = self.person.arms[1].fingers[i]
-        i += 1
-    return(a:arr)
-"""
-
-
-def test_infinite_storage_objects():
-    s = state()
-    c = s.abi_contract(infinite_storage_object_test_code)
-    c.ping()
-    assert 1 == c.query_chessboard(0, 0)
-    assert 2 == c.query_chessboard(0, 1)
-    assert 3 == c.query_chessboard(3, 0)
-    assert [100, 0, 0] == c.query_stats(0)
-    assert [0, 15, 12] == c.query_stats(1)
-    assert 0 == c.query_items(1, 3)
-    assert 0 == c.query_items(0, 2)
-    assert 9 == c.query_items(1, 2)
-    assert [555, 556, 656, 559, 1659,
-            557, 0, 0, 0, 558,
-            657, 0, 0, 0, 658] == c.query_person()
-
-
-fail1 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms[0]
-"""
-
-fail2 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms[0].fingers
-"""
-
-fail3 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms[0].fingers[4][3]
-"""
-
-fail4 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms.elbow[0].fingers[4]
-"""
-
-fail5 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms[0].fingers[4].nail
-"""
-
-fail6 = """
-data person(head, arms[2](elbow, fingers[5]), legs[2])
-
-x = self.person.arms[0].elbow.skin
-"""
-
-fail7 = """
-def return_array():
-    return([1,2,3], items=3)
-
-def main():
-    return(self.return_array())
-"""
-
-
-def test_storagevar_fails():
-    s = state()
-    success1, success2, success3, success4, success5, success6 = \
-        0, 0, 0, 0, 0, 0
-    try:
-        s.contract(fail1)
-    except Exception as e:
-        success1 = "Storage variable access not deep enough" in str(e)
-    assert success1, e
-
-    try:
-        s.contract(fail2)
-    except Exception as e:
-        success2 = "Too few array index lookups" in str(e)
-    assert success2, e
-
-    try:
-        s.contract(fail3)
-    except Exception as e:
-        success3 = "Too many array index lookups" in str(e)
-    assert success3, e
-
-    try:
-        s.contract(fail4)
-    except Exception as e:
-        success4 = "Too few array index lookups" in str(e)
-    assert success4, e
-
-    try:
-        s.contract(fail5)
-    except Exception as e:
-        success5 = "Invalid object member" in str(e)
-    assert success5, e
-
-    try:
-        s.contract(fail6)
-    except Exception as e:
-        success6 = "Invalid object member" in str(e)
-    assert success6, e
-
-
-def test_type_system_fails():
-    s = state()
-    success7 = False
-
-    try:
-        s.contract(fail7)
-    except Exception as e:
-        success7 = "Please specify maximum" in str(e)
-    assert success7, e
-
-
-working_returnarray_code = """
-def return_array():
-    return([1,2,3], items=3)
-
-def main():
-    return(self.return_array(outitems=3):arr)
-"""
-
-
-def test_returnarray_code():
-    s = state()
-    c = s.abi_contract(working_returnarray_code)
-    assert c.main() == [1, 2, 3]
 
 
 crowdfund_code = """
@@ -1135,83 +1041,36 @@ def test_crowdfund():
     assert mida3 + 59049 == s.block.get_balance(tester.a2)
 
 
-saveload_code = """
-
-data store[1000]
-
-def kall():
-    a = text("sir bobalot to the rescue !!1!1!!1!1")
-    save(self.store[0], a, chars=60)
-    b = load(self.store[0], chars=60)
-    c = load(self.store[0], chars=33)
-    return([a[0], a[1], b[0], b[1], c[0], c[1]]:arr)
-
-"""
-
-import bitcoin
-
-
-def test_saveload():
-    s = state()
-    c = s.abi_contract(saveload_code)
-    o = c.kall()
-    assert o[0] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[0], 16)
-    assert o[1] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[1], 16)
-    assert o[2] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[2], 16)
-    assert o[3] == 0x2131213100000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[3], 16)
-    assert o[4] == 0x73697220626f62616c6f7420746f207468652072657363756520212131213121, bitcoin.encode(o[4], 16)
-    assert o[5] == 0x2100000000000000000000000000000000000000000000000000000000000000, bitcoin.encode(o[5], 16)
-
-
-saveload_code2 = """
-data buf
-data buf2
-
-mystr = text("01ab")
-save(self.buf, mystr:str)
-save(self.buf2, mystr, chars=4)
-"""
-
-
-def test_saveload2():
-    s = state()
-    c = s.contract(saveload_code2)
-    s.send(tester.k0, c, 0)
-
-    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 0)) == b'01ab' + b'\x00' * 28
-    assert ethutils.int_to_big_endian(s.block.get_storage_data(c, 1)) == b'01ab' + b'\x00' * 28
-
-
-sdiv_code = """
-def kall():
-    return([2^255 / 2^253, 2^255 % 3]:arr)
-"""
-
-
 def test_sdiv():
+    sdiv_code = """
+contract testme {
+    function kall() returns (uint, uint, uint) {
+        return (2 ** 255, 2 ** 255 / 2 ** 253, 2 ** 255 % 3);
+    }
+}
+"""
+
     s = state()
-    c = s.abi_contract(sdiv_code)
-    assert [-4, -2] == c.kall()
+    c = s.abi_contract(sdiv_code, language='solidity')
+    assert [57896044618658097711785492504343953926634992332820282019728792003956564819968, -4, -2] == c.kall()
 
 
 basic_argcall_code = """
-def argcall(args:arr):
-    log(1)
-    o = (args[0] + args[1] * 10 + args[2] * 100)
-    log(4)
-    return o
+contract testme {
+    function argcall(uint[] args) returns (uint) {
+        return args[0] + args[1] * 10 + args[2] * 100;
+    }
 
-def argkall(args:arr):
-    log(2)
-    o = self.argcall(args)
-    log(3)
-    return o
+    function argkall(uint[] args) returns (uint) {
+        return this.argcall(args);
+    }
+}
 """
 
 
 def test_argcall():
     s = state()
-    c = s.abi_contract(basic_argcall_code)
+    c = s.abi_contract(basic_argcall_code, language='solidity')
     assert 375 == c.argcall([5, 7, 3])
     assert 376 == c.argkall([6, 7, 3])
 
@@ -1229,7 +1088,7 @@ def argkall(args:arr):
 
 def test_argcall2():
     s = state()
-    c = s.abi_contract(more_complex_argcall_code)
+    c = s.abi_contract(more_complex_argcall_code, language='solidity')
     assert [4, 8] == c.argcall([2, 4])
     assert [6, 10] == c.argkall([3, 5])
 
@@ -1271,7 +1130,7 @@ def sort(args:arr):
 @pytest.mark.timeout(100)
 def test_sort():
     s = state()
-    c = s.abi_contract(sort_code)
+    c = s.abi_contract(sort_code, language='solidity')
     assert c.sort([9]) == [9]
     assert c.sort([9, 5]) == [5, 9]
     assert c.sort([9, 3, 5]) == [3, 5, 9]
@@ -1297,7 +1156,7 @@ def test(args:arr):
 def test_indirect_sort():
     s = state()
     open_cleanonteardown(filename9, 'w').write(sort_code)
-    c = s.abi_contract(sort_tester_code)
+    c = s.abi_contract(sort_tester_code, language='solidity')
     assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
     os.remove(filename9)
 
@@ -1311,105 +1170,9 @@ def kall(a:arr, b, c:arr, d:str, e):
 
 def test_multiarg_code():
     s = state()
-    c = s.abi_contract(multiarg_code)
+    c = s.abi_contract(multiarg_code, language='solidity')
     o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
     assert o == [862541, ethutils.safe_ord('d') + ethutils.safe_ord('o') + ethutils.safe_ord('g'), 4]
-
-
-peano_code = """
-macro padd($x, psuc($y)):
-    psuc(padd($x, $y))
-
-macro padd($x, z()):
-    $x
-
-macro dec(psuc($x)):
-    dec($x) + 1
-
-macro dec(z()):
-    0
-
-macro pmul($x, z()):
-    z()
-
-macro pmul($x, psuc($y)):
-    padd(pmul($x, $y), $x)
-
-macro pexp($x, z()):
-    one()
-
-macro pexp($x, psuc($y)):
-    pmul($x, pexp($x, $y))
-
-macro fac(z()):
-    one()
-
-macro fac(psuc($x)):
-    pmul(psuc($x), fac($x))
-
-macro one():
-    psuc(z())
-
-macro two():
-    psuc(psuc(z()))
-
-macro three():
-    psuc(psuc(psuc(z())))
-
-macro five():
-    padd(three(), two())
-
-def main():
-    return([dec(pmul(three(), pmul(three(), three()))), dec(fac(five()))]:arr)
-
-"""
-
-
-def test_macros():
-    s = state()
-    c = s.abi_contract(peano_code)
-    assert c.main() == [27, 120]
-
-
-type_code = """
-type f: [a, b, c, d, e]
-
-macro f($a) + f($b):
-    f(add($a, $b))
-
-macro f($a) - f($b):
-    f(sub($a, $b))
-
-macro f($a) * f($b):
-    f(mul($a, $b) / 10000)
-
-macro f($a) / f($b):
-    f(sdiv($a * 10000, $b))
-
-macro f($a) % f($b):
-    f(smod($a, $b))
-
-macro f($v) = f($w):
-    $v = $w
-
-macro(10) f($a):
-    $a / 10000
-
-macro fify($a):
-    f($a * 10000)
-
-a = fify(5)
-b = fify(2)
-c = a / b
-e = c + (a / b)
-return(e)
-"""
-
-
-def test_types():
-    s = state()
-    c = s.contract(type_code)
-    assert ethutils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
 
 
 ecrecover_code = """
@@ -1423,7 +1186,7 @@ def test_ecrecover():
     this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them
     """
     s = state()
-    c = s.abi_contract(ecrecover_code)
+    c = s.abi_contract(ecrecover_code, language='solidity')
 
     H = 60772363713814795336605161565488663769306106990467902980560042300358765319404
     V = 27
@@ -1435,165 +1198,167 @@ def test_ecrecover():
     assert result == pubkey
 
 
-sha256_code = """
-def main():
-    return([sha256(0, chars=0), sha256(3), sha256(text("doge"), chars=3), sha256(text("dog"):str), sha256([0,0,0,0,0]:arr), sha256([0,0,0,0,0,0], items=5)]:arr)
-"""
-
-
 def test_sha256():
-    s = state()
-    c = s.abi_contract(sha256_code)
-    assert c.main() == [
-        0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 - 2 ** 256,
-        0xd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946 - 2 ** 256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
-        0xcd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944 - 2 ** 256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256,
-        0xb393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4 - 2 ** 256
-    ]
-
-
-ripemd160_code = """
-def main():
-    return([ripemd160(0, chars=0), ripemd160(3), ripemd160(text("doge"), chars=3), ripemd160(text("dog"):str), ripemd160([0,0,0,0,0]:arr), ripemd160([0,0,0,0,0,0], items=5)]:arr)
+    sha256_code = """
+contract testme {
+    function main() returns(bytes32, uint, bytes32, uint, bytes32, uint, bytes32, uint, bytes32, uint) {
+        return (
+            sha256(),
+            uint(sha256()),
+            sha256(3),
+            uint(sha256(3)),
+            sha256(uint(3)),
+            uint(sha256(uint(3))),
+            sha256("dog"),
+            uint(sha256("dog")),
+            sha256(uint(0), uint(0), uint(0), uint(0), uint(0)),
+            uint(sha256(uint(0), uint(0), uint(0), uint(0), uint(0)))
+        );
+    }
+}
 """
+
+    s = state()
+    c = s.abi_contract(sha256_code, language='solidity')
+
+    o = c.main()
+    assert o[0] == binascii.unhexlify(b'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    assert o[1] == ethutils.big_endian_to_int(binascii.unhexlify(b'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'))
+    assert o[2] == binascii.unhexlify(b'084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5')
+    assert o[3] == ethutils.big_endian_to_int(binascii.unhexlify(b'084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5'))
+    assert o[4] == binascii.unhexlify(b'd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946')
+    assert o[5] == ethutils.big_endian_to_int(binascii.unhexlify(b'd9147961436944f43cd99d28b2bbddbf452ef872b30c8279e255e7daafc7f946'))
+    assert o[6] == binascii.unhexlify(b'cd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944')
+    assert o[7] == ethutils.big_endian_to_int(binascii.unhexlify(b'cd6357efdd966de8c0cb2f876cc89ec74ce35f0968e11743987084bd42fb8944'))
+    assert o[8] == binascii.unhexlify(b'b393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4')
+    assert o[9] == ethutils.big_endian_to_int(binascii.unhexlify(b'b393978842a0fa3d3e1470196f098f473f9678e72463cb65ec4ab5581856c2e4'))
 
 
 def test_ripemd160():
-    s = state()
-    c = s.abi_contract(ripemd160_code)
-    assert c.main() == [
-        0x9c1185a5c5e9fc54612808977ee8f548b2258d31,
-        0x44d90e2d3714c8663b632fcf0f9d5f22192cc4c8,
-        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
-        0x2a5756a3da3bc6e4c66a65028f43d31a1290bb75,
-        0x9164cab7f680fd7a790080f2e76e049811074349,
-        0x9164cab7f680fd7a790080f2e76e049811074349]
-
-
-sha3_code = """
-def main():
-    return([sha3(0, chars=0), sha3(3), sha3(text("doge"), chars=3), sha3(text("dog"):str), sha3([0,0,0,0,0]:arr), sha3([0,0,0,0,0,0], items=5)]:arr)
+    ripemd160_code = """
+contract testme {
+    function main() returns(bytes20, uint, bytes20, uint, bytes20, uint, bytes20, uint, bytes20, uint) {
+        return (
+            ripemd160(),
+            uint(ripemd160()),
+            ripemd160(3),
+            uint(ripemd160(3)),
+            ripemd160(uint(3)),
+            uint(ripemd160(uint(3))),
+            ripemd160("dog"),
+            uint(ripemd160("dog")),
+            ripemd160(uint(0), uint(0), uint(0), uint(0), uint(0)),
+            uint(ripemd160(uint(0), uint(0), uint(0), uint(0), uint(0)))
+        );
+    }
+}
 """
+
+    s = state()
+    c = s.abi_contract(ripemd160_code, language='solidity')
+
+    o = c.main()
+    assert o[0] == binascii.unhexlify(b'9c1185a5c5e9fc54612808977ee8f548b2258d31')
+    assert o[1] == ethutils.big_endian_to_int(binascii.unhexlify(b'9c1185a5c5e9fc54612808977ee8f548b2258d31'))
+    assert o[2] == binascii.unhexlify(b'b2afadd73b9922f395573a52e7032b7597ff8c3e')
+    assert o[3] == ethutils.big_endian_to_int(binascii.unhexlify(b'b2afadd73b9922f395573a52e7032b7597ff8c3e'))
+    assert o[4] == binascii.unhexlify(b'44d90e2d3714c8663b632fcf0f9d5f22192cc4c8')
+    assert o[5] == ethutils.big_endian_to_int(binascii.unhexlify(b'44d90e2d3714c8663b632fcf0f9d5f22192cc4c8'))
+    assert o[6] == binascii.unhexlify(b'2a5756a3da3bc6e4c66a65028f43d31a1290bb75')
+    assert o[7] == ethutils.big_endian_to_int(binascii.unhexlify(b'2a5756a3da3bc6e4c66a65028f43d31a1290bb75'))
+    assert o[8] == binascii.unhexlify(b'9164cab7f680fd7a790080f2e76e049811074349')
+    assert o[9] == ethutils.big_endian_to_int(binascii.unhexlify(b'9164cab7f680fd7a790080f2e76e049811074349'))
 
 
 def test_sha3():
-    s = state()
-    c = s.abi_contract(sha3_code)
-    assert c.main() == [
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470 - 2 ** 256,
-        0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b - 2 ** 256,
-        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
-        0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256,
-        0xdfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd - 2 ** 256
-    ]
-
-
-types_in_functions_code = """
-type fixedp: [a, b]
-
-macro fixedp($x) * fixedp($y):
-    fixedp($x * $y / 2^64)
-
-macro fixedp($x) / fixedp($y):
-    fixedp($x * 2^64 / $y)
-
-macro raw_unfixedp(fixedp($x)):
-    $x / 2^64
-
-macro set(fixedp($x), $y):
-    $x = 2^64 * $y
-
-macro fixedp($x) = fixedp($y):
-    $x = $y
-
-def sqrdiv(a, b):
-    return(raw_unfixedp((a / b) * (a / b)))
+    sha3_code = """
+contract testme {
+    function main() returns(bytes32, uint, bytes32, uint, bytes32, uint, bytes32, uint, bytes32, uint) {
+        return (
+            sha3(),
+            uint(sha3()),
+            sha3(3),
+            uint(sha3(3)),
+            sha3(uint(3)),
+            uint(sha3(uint(3))),
+            sha3("dog"),
+            uint(sha3("dog")),
+            sha3(uint(0), uint(0), uint(0), uint(0), uint(0)),
+            uint(sha3(uint(0), uint(0), uint(0), uint(0), uint(0)))
+        );
+    }
+}
 """
 
-
-def test_types_in_functions():
     s = state()
-    c = s.abi_contract(types_in_functions_code)
-    assert c.sqrdiv(25, 2) == 156
+    c = s.abi_contract(sha3_code, language='solidity')
 
-
-more_infinites_code = """
-data a[](b, c)
-
-def testVerifyTx():
-
-    self.a[0].b = 33
-
-    self.a[0].c = 55
-
-    return(self.a[0].b)
-"""
-
-
-def test_more_infinites():
-    s = state()
-    c = s.abi_contract(more_infinites_code)
-    assert c.testVerifyTx() == 33
-
-
-prevhashes_code = """
-def get_prevhashes(k):
-    o = array(k)
-    i = 0
-    while i < k:
-        o[i] = block.prevhash(i)
-        i += 1
-    return(o:arr)
-"""
+    o = c.main()
+    assert o[0] == binascii.unhexlify(b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470')
+    assert o[1] == ethutils.big_endian_to_int(binascii.unhexlify(b'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'))
+    assert o[2] == binascii.unhexlify(b'69c322e3248a5dfc29d73c5b0553b0185a35cd5bb6386747517ef7e53b15e287')
+    assert o[3] == ethutils.big_endian_to_int(binascii.unhexlify(b'69c322e3248a5dfc29d73c5b0553b0185a35cd5bb6386747517ef7e53b15e287'))
+    assert o[4] == binascii.unhexlify(b'c2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b')
+    assert o[5] == ethutils.big_endian_to_int(binascii.unhexlify(b'c2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b'))
+    assert o[6] == binascii.unhexlify(b'41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a')
+    assert o[7] == ethutils.big_endian_to_int(binascii.unhexlify(b'41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a'))
+    assert o[8] == binascii.unhexlify(b'dfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd')
+    assert o[9] == ethutils.big_endian_to_int(binascii.unhexlify(b'dfded4ed5ac76ba7379cfe7b3b0f53e768dca8d45a34854e649cfc3c18cbd9cd'))
 
 
 def test_prevhashes():
     global db
+    prevhashes_code = """
+contract testme {
 
+    function get_prevhash(uint k) returns (bytes32) {
+        return block.blockhash(block.number - k);
+    }
+
+    function get_prevhashes(uint k) returns (bytes32[]) {
+        bytes32[] memory o = new bytes32[](k);
+
+        uint i = 0;
+        while (i < k) {
+            o[i] = block.blockhash(block.number - i);
+            i += 1;
+        }
+
+        return o;
+    }
+}
+"""
     s = state()
-    c = s.abi_contract(prevhashes_code)
+    c = s.abi_contract(prevhashes_code, language='solidity')
+
+    assert binascii.hexlify(c.get_prevhash(0)) == b"b5a4cd1270bc437e909d9569079ad17437a65822ee9e4c378670732a1430ed67"
+    assert binascii.hexlify(c.get_prevhash(1)) == b"b5a4cd1270bc437e909d9569079ad17437a65822ee9e4c378670732a1430ed67"
+    assert binascii.hexlify(c.get_prevhash(1)) == b"219e9a113a7c66443183171e389bfd5eaf957f5b8ab825358d72fa8e0cc8c16c"
 
     # Hashes of last 14 blocks including existing one
-    o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
+    o1 = c.get_prevhashes(14)
 
     cursor = db.cursor()
     blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (14, )))
     cursor.close()
-    t1 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks]
+    t1 = [binascii.unhexlify(b['block_hash']) for b in blocks]
 
     assert o1 == t1
 
     # Test 256 limit: only 1 <= g <= 256 generation ancestors get hashes shown
-    o2 = [x % 2 ** 256 for x in c.get_prevhashes(270)]
+    o2 = c.get_prevhashes(270)
 
     cursor = db.cursor()
     blocks = list(cursor.execute('''SELECT * FROM blocks ORDER BY block_index DESC LIMIT %d''' % (256, )))
     cursor.close()
-    t2 = [ethutils.big_endian_to_int(binascii.unhexlify(b['block_hash'])) for b in blocks] + [0] * (270 - 256)
+    t2 = [binascii.unhexlify(b['block_hash']) for b in blocks] + ([b'\x00' * 32] * (270 - 256))
 
     assert o2 == t2
 
 
-abi_contract_code = """
-def mul2(a):
-    return(a * 2)
-
-def returnten():
-    return(10)
-"""
-
-
-def test_abi_contract():
-    s = state()
-    c = s.abi_contract(abi_contract_code)
-    assert c.mul2(3) == 6
-    assert c.returnten() == 10
-
-
-mcopy_code = """
+@pytest.mark.skip(reason='assembly')
+def test_mcopy():
+    mcopy_code = """
 def mcopy_test(foo:str, a, b, c):
     info = string(32*3 + len(foo))
     info[0] = a
@@ -1602,16 +1367,15 @@ def mcopy_test(foo:str, a, b, c):
     mcopy(info+(items=3), foo, len(foo))
     return(info:str)
 """
-
-
-def test_mcopy():
     s = state()
-    c = s.abi_contract(mcopy_code)
+    c = s.abi_contract(mcopy_code, language='solidity')
     assert c.mcopy_test("123", 5, 6, 259) == \
            b'\x00' * 31 + b'\x05' + b'\x00' * 31 + b'\x06' + b'\x00' * 30 + b'\x01\x03' + b'123'
 
 
-mcopy_code_2 = """
+@pytest.mark.skip(reason='assembly')
+def test_mcopy2():
+    mcopy_code_2 = """
 def mcopy_test():
     myarr = array(3)
     myarr[0] = 99
@@ -1623,108 +1387,66 @@ def mcopy_test():
     return(mystr:str)
 """
 
-
-def test_mcopy2():
     s = state()
-    c = s.abi_contract(mcopy_code_2)
+    c = s.abi_contract(mcopy_code_2, language='solidity')
     assert c.mcopy_test() == \
            b''.join([ethutils.zpad(ethutils.int_to_big_endian(x), 32) for x in [99, 111, 119]])
 
 
-array_saveload_code = """
-data a[5]
-
-def array_saveload():
-    a = [1,2,3,4,5]
-    save(self.a[0], a, items=5)
-    a = load(self.a[0], items=4)
-    log(len(a))
-    return(load(self.a[0], items=4):arr)
-"""
-
-
-def test_saveload3():
-    s = state()
-    c = s.abi_contract(array_saveload_code)
-    assert c.array_saveload() == [1, 2, 3, 4]
-
-
-string_manipulation_code = """
-def f1(istring:str):
-    setch(istring, 0, "a")
-    setch(istring, 1, "b")
-    return(istring:str)
-
-def t1():
-    istring = text("cd")
-    res = self.f1(istring, outchars=2)
-    return([getch(res,0), getch(res,1)]:arr)  # should return [97,98]
-"""
-
-
 def test_string_manipulation():
-    s = state()
-    c = s.abi_contract(string_manipulation_code)
-    assert c.t1() == [97, 98]
+    string_manipulation_code = """
+contract testme {
+    function f1(string str) returns (string) {
+        bytes(str)[0] = "a";
+        bytes(str)[1] = "b";
 
-
-more_infinite_storage_object_code = """
-data block[2^256](_blockHeader(_prevBlock))
-
-data numAncestorDepths
-
-data logs[2]
-
-def initAncestorDepths():
-    self.numAncestorDepths = 2
-
-def testStoreB(number, blockHash, hashPrevBlock, i):
-    self.block[blockHash]._blockHeader._prevBlock = hashPrevBlock
-
-    self.logs[i] = self.numAncestorDepths
-
-
-def test2():
-    self.initAncestorDepths()
-    self.testStoreB(45, 45, 44, 0)
-    self.testStoreB(46, 46, 45, 1)
-    return ([self.logs[0], self.logs[1]]:arr)
+        return str;
+    }
+}
 """
 
 
-def test_more_infinite_storage():
     s = state()
-    c = s.abi_contract(more_infinite_storage_object_code)
-    assert c.test2() == [2, 2]
-
-
-double_array_code = """
-def foo(a:arr, b:arr):
-    i = 0
-    tot = 0
-    while i < len(a):
-        tot = tot * 10 + a[i]
-        i += 1
-    j = 0
-    tot2 = 0
-    while j < len(b):
-        tot2 = tot2 * 10 + b[j]
-        j += 1
-    return ([tot, tot2]:arr)
-
-def bar(a:arr, m:str, b:arr):
-    return(self.foo(a, b, outitems=2):arr)
-"""
+    c = s.abi_contract(string_manipulation_code, language='solidity')
+    assert c.f1("cde") == b"abe"
 
 
 def test_double_array():
+    double_array_code = """
+contract testme {
+    function foo(uint[] a, uint[] b) returns (uint, uint) {
+        uint i = 0;
+        uint tot = 0;
+
+        while (i < a.length) {
+            tot = tot * 10 + a[i];
+            i += 1;
+        }
+
+        uint j = 0;
+        uint tot2 = 0;
+
+        while (j < b.length) {
+            tot2 = tot2 * 10 + b[j];
+            j += 1;
+        }
+
+        return (tot, tot2);
+    }
+
+    function bar(uint[] a, string m, uint[] b) returns (uint, uint) {
+        return (this.foo(a, b));
+    }
+}
+"""
     s = state()
-    c = s.abi_contract(double_array_code)
+    c = s.abi_contract(double_array_code, language='solidity')
     assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
     assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
 
 
-abi_logging_code = """
+def test_abi_logging():
+    abi_logging_code = """
 event rabbit(x)
 event frog(y:indexed)
 event moose(a, b:str, c:indexed, d:arr)
@@ -1743,14 +1465,12 @@ def test_chicken(em:address):
     log(type=chicken, em)
 """
 
-
-def test_abi_logging():
     s = state()
 
     o = []
     s.log_listeners.append(lambda log: o.append(c._translator.listen(log)))
 
-    c = s.abi_contract(abi_logging_code)
+    c = s.abi_contract(abi_logging_code, language='solidity')
 
     c.test_rabbit(3)
     assert o == [{"_event_type": b"rabbit", "x": 3}]
@@ -1771,44 +1491,25 @@ def test_abi_logging():
     o.pop()
 
 
-new_format_inner_test_code = """
-def foo(a, b:arr, c:str):
-    return a * 10 + b[1]
-"""
-
-filename4 = "nfitc2635987162498621846198246.se"
-
-new_format_outer_test_code = """
-extern blah: [foo:[int256,int256[],bytes]:int256]
-
-def bar():
-    x = create("%s")
-    return x.foo(17, [3, 5, 7], text("dog"))
-""" % filename4
-
-
-def test_new_format():
-    s = state()
-    open_cleanonteardown(filename4, 'w').write(new_format_inner_test_code)
-    c = s.abi_contract(new_format_outer_test_code)
-    assert c.bar() == 175
-
-
-abi_address_output_test_code = """
-data addrs[]
-
-def get_address(key):
-    return(self.addrs[key]:address)
-
-def register(key, addr:address):
-    if not self.addrs[key]:
-        self.addrs[key] = addr
-"""
-
-
 def test_abi_address_output():
+    abi_address_output_test_code = """
+contract testme {
+    mapping(uint => address) addrs;
+
+    function get_address(uint key) returns (address) {
+        return addrs[key];
+    }
+
+    function register(uint key, address addr) {
+        if (addrs[key] == 0x0) {
+            addrs[key] = addr;
+        }
+    }
+}
+"""
+
     s = state()
-    c = s.abi_contract(abi_address_output_test_code)
+    c = s.abi_contract(abi_address_output_test_code, language='solidity')
     c.register(123, tester.a0)
     c.register(123, tester.a1)
     c.register(125, tester.a2)
@@ -1816,27 +1517,42 @@ def test_abi_address_output():
     assert c.get_address(125) == tester.a2
 
 
-filename5 = 'abi_output_tester_1264876521746198724124'
+def test_inner_abi_address_output1():
+    abi_address_output_test_code = """
+contract subtestme {
+    mapping(uint => address) addrs;
 
-abi_address_caller_code = """
-extern foo: [get_address:[int256]:address, register:[int256,address]:_]
-data sub
+    function _get_address(uint key) returns (address) {
+        return addrs[key];
+    }
 
-def init():
-    self.sub = create("%s")
+    function _register(uint key, address addr) {
+        if (addrs[key] == 0x0) {
+            addrs[key] = addr;
+        }
+    }
+}
 
-def get_address(key):
-    return(self.sub.get_address(key):address)
+contract testme {
+    address sub;
 
-def register(key, addr:address):
-    self.sub.register(key, addr)
-""" % filename5
+    function testme() {
+        sub = new subtestme();
+    }
 
+    function get_address(uint key) returns (address) {
+        return subtestme(sub)._get_address(key);
+    }
 
-def test_inner_abi_address_output():
+    function register(uint key, address addr) {
+        return subtestme(sub)._register(key, addr);
+    }
+}
+"""
+
     s = state()
-    open_cleanonteardown(filename5, 'w').write(abi_address_output_test_code)
-    c = s.abi_contract(abi_address_caller_code)
+    c = s.abi_contract(abi_address_output_test_code, language='solidity')
+    logger.warn('---------------------------------------------')
     c.register(123, tester.a0)
     c.register(123, tester.a1)
     c.register(125, tester.a2)
@@ -1844,17 +1560,60 @@ def test_inner_abi_address_output():
     assert c.get_address(125) == tester.a2
 
 
-string_logging_code = """
+
+def test_inner_abi_address_output2():
+    abi_address_output_test_code = """
+contract subtestme {
+    mapping(uint => address) addrs;
+
+    function _get_address(uint key) returns (address) {
+        return addrs[key];
+    }
+
+    function _register(uint key, address addr) {
+        if (addrs[key] == 0x0) {
+            addrs[key] = addr;
+        }
+    }
+}
+
+contract testme {
+    subtestme sub;
+
+    function testme() {
+        sub = new subtestme();
+    }
+
+    function get_address(uint key) returns (address) {
+        return subtestme(sub)._get_address(key);
+    }
+
+    function register(uint key, address addr) {
+        return subtestme(sub)._register(key, addr);
+    }
+}
+"""
+
+    s = state()
+    c = s.abi_contract(abi_address_output_test_code, language='solidity')
+    logger.warn('---------------------------------------------')
+    c.register(123, tester.a0)
+    c.register(123, tester.a1)
+    c.register(125, tester.a2)
+    assert c.get_address(123) == tester.a0
+    assert c.get_address(125) == tester.a2
+
+
+def test_string_logging():
+    string_logging_code = """
 event foo(x:string:indexed, y:bytes:indexed, z:str:indexed)
 
 def moo():
     log(type=foo, text("bob"), text("cow"), text("dog"))
 """
 
-
-def test_string_logging():
     s = state()
-    c = s.abi_contract(string_logging_code)
+    c = s.abi_contract(string_logging_code, language='solidity')
     o = []
 
     s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
@@ -1869,55 +1628,3 @@ def test_string_logging():
         "z": b"dog",
         "__hash_z": ethutils.sha3("dog")
     }]
-
-
-params_code = """
-data blah
-
-
-def init():
-    self.blah = $FOO
-
-
-def garble():
-    return(self.blah)
-
-def marble():
-    return(text($BAR):str)
-"""
-
-
-def test_params_contract():
-    s = state()
-    c = s.abi_contract(params_code, FOO=4, BAR='horse')
-    assert c.garble() == 4
-    assert c.marble() == bytes('horse', 'utf8')
-
-
-prefix_types_in_functions_code = """
-type fixedp: fp_
-
-macro fixedp($x) * fixedp($y):
-    fixedp($x * $y / 2^64)
-
-macro fixedp($x) / fixedp($y):
-    fixedp($x * 2^64 / $y)
-
-macro raw_unfixedp(fixedp($x)):
-    $x / 2^64
-
-macro set(fixedp($x), $y):
-    $x = 2^64 * $y
-
-macro fixedp($x) = fixedp($y):
-    $x = $y
-
-def sqrdiv(fp_a, fp_b):
-    return(raw_unfixedp((fp_a / fp_b) * (fp_a / fp_b)))
-"""
-
-
-def test_prefix_types_in_functions():
-    s = state()
-    c = s.abi_contract(prefix_types_in_functions_code)
-    assert c.sqrdiv(25, 2) == 156

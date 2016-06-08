@@ -1537,6 +1537,10 @@ def test_more_infinites():
 
 
 prevhashes_code = """
+
+def get_prevhash(k):
+    return block.prevhash(k)
+
 def get_prevhashes(k):
     o = array(k)
     i = 0
@@ -1552,6 +1556,8 @@ def test_prevhashes():
 
     s = state()
     c = s.abi_contract(prevhashes_code)
+
+    assert c.get_prevhash(1) == ""
 
     # Hashes of last 14 blocks including existing one
     o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
