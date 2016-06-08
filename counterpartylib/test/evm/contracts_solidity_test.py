@@ -992,6 +992,94 @@ def clear(self, id):
             i += 1
 """
 
+crowdfund_code = """
+contract testme {
+    struct Contrib {
+        address sender;
+        uint value;
+    }
+
+    struct Campaign {
+        address recipient;
+        uint goal;
+        uint deadline;
+        uint contrib_total;
+        uint contrib_count;
+        Contrib[2^50] contribs;
+    }
+
+    Campaign[2^80] campaigns;
+
+    function create_campaign(uint id, address recipient, uint goal, uint timelimit) returns (uint) {
+        if (campaigns[id].recipient != 0x0) {
+            return 0;
+        }
+
+        campaigns[id].recipient = recipient;
+        campaigns[id].goal = goal;
+        campaigns[id].deadline = block.timestamp + timelimit;
+
+        return 1;
+    }
+
+    function contribute(uint id) returns (uint) {
+        # Update contribution total
+        uint total_contributed = campaigns[id].contrib_total + msg.value;
+        campaigns[id].contrib_total = total_contributed;
+
+        # Record new contribution
+        uint sub_index = campaigns[id].contrib_count;
+        campaigns[id].contribs[sub_index].sender = msg.sender;
+        campaigns[id].contribs[sub_index].value = msg.value;
+        campaigns[id].contrib_count = sub_index + 1;
+
+        # Enough funding?
+        if (total_contributed >= campaigns[id].goal) {
+            campaigns[id].recipient.send(total_contributed);
+            clear(id);
+            return 1;
+        }
+
+        # Expired?
+        if (block.timestamp > campaigns[id].deadline) {
+            uint i = 0;
+            uint c = campaigns[id].contrib_count;
+            while (i < c) {
+                campaigns[id].contribs[i].sender.send(campaigns[id].contribs[i].value);
+                i += 1;
+            }
+            clear(id);
+            return 2;
+        }
+    }
+
+
+    # Progress report [2, id]
+    function progress_report(uint id) returns (uint) {
+        return campaigns[id].contrib_total;
+    }
+
+    # Clearing function for internal use
+    function clear(uint id) {
+        if (msg.sender == this) {
+            campaigns[id].recipient = 0x0;
+            campaigns[id].goal = 0;
+            campaigns[id].deadline = 0;
+
+            uint c = campaigns[id].contrib_count;
+            campaigns[id].contrib_count = 0;
+            campaigns[id].contrib_total = 0;
+
+            uint i = 0;
+            while (i < c) {
+                campaigns[id].contribs[i].sender = 0x0;
+                campaigns[id].contribs[i].value = 0;
+                i += 1;
+            }
+        }
+    }
+"""
+
 
 def test_crowdfund():
     """
@@ -1606,10 +1694,20 @@ contract testme {
 
 def test_string_logging():
     string_logging_code = """
-event foo(x:string:indexed, y:bytes:indexed, z:str:indexed)
+contract testme {
+    event foo {
+        string x;
+        string y;
+    }
 
-def moo():
-    log(type=foo, text("bob"), text("cow"), text("dog"))
+    function moo() {
+        log 0(0, 0);
+        log 1(0, 0, "t1");
+        log 1(0, 0, "t1", "t2");
+
+        foo("x", "y");
+    }
+}
 """
 
     s = state()
