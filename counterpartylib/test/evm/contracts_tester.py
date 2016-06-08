@@ -114,12 +114,6 @@ class ABIContract(object):
         def kall_factory(f):
 
             def kall(*args, **kwargs):
-                print('kall', kwargs.get('sender', DEFAULT_SENDER),
-                                 self.address,
-                                 kwargs.get('value', 0),
-                                 self._translator.encode(f, args),
-                                 kwargs.get('startgas', DEFAULT_STARTGAS),
-                                 **dict_without(kwargs, 'startgas', 'sender', 'value', 'output'))
                 o = _state._send(kwargs.get('sender', DEFAULT_SENDER),
                                  self.address,
                                  kwargs.get('value', 0),

@@ -204,12 +204,6 @@ def test_this_call():
     """test the difference between `this.fn()` and `fn()`; `this.fn()` should use `CALL`, which costs more gas"""
     returnten_code = '''
 contract testme {
-    address mymul2;
-
-    function setmul2(address _mul2) {
-        mymul2 = _mul2;
-    }
-
     function double(uint v) returns (uint) {
         return v * 2;
     }
@@ -232,6 +226,35 @@ contract testme {
     b = s.block.get_balance(tester.k0)
     assert c.doubleinternal() == 10
     assert b - s.block.get_balance(tester.k0) == 21501  # gas used
+
+
+def test_private_fns():
+    returnten_code = '''
+contract testme {
+    function double(uint v) private returns (uint) {
+        return v * 2;
+    }
+
+    function doublepub() returns (uint) {
+        return double(5);
+    }
+}'''
+    s = state()
+
+    c = s.abi_contract(returnten_code, sender=tester.k0, language='solidity')
+    assert c.doublepub() == 10
+
+    e = None
+    try:
+        c.double(10)
+    except AttributeError as _e:
+        e = _e
+    assert e is not None and isinstance(e, AttributeError)
+
+    # this is a call to `double(10)`, but we can't construct that through normal means because it knows it's private (see above)
+    data = b'\xee\xe9r\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\n'
+    o = s._send(tester.DEFAULT_SENDER, c.address, 0, data, tester.DEFAULT_STARTGAS)
+    assert o == b""
 
 
 # Test inherit
@@ -1005,42 +1028,38 @@ contract testme {
         uint deadline;
         uint contrib_total;
         uint contrib_count;
-        Contrib[2^50] contribs;
+        mapping(uint => Contrib) contribs;
     }
 
-    Campaign[2^80] campaigns;
+    mapping(uint => Campaign) campaigns;
 
     function create_campaign(uint id, address recipient, uint goal, uint timelimit) returns (uint) {
         if (campaigns[id].recipient != 0x0) {
             return 0;
         }
 
-        campaigns[id].recipient = recipient;
-        campaigns[id].goal = goal;
-        campaigns[id].deadline = block.timestamp + timelimit;
-
+        campaigns[id] = Campaign(recipient, goal, block.timestamp + timelimit, 0, 0);
         return 1;
     }
 
     function contribute(uint id) returns (uint) {
-        # Update contribution total
+        // Update contribution total
         uint total_contributed = campaigns[id].contrib_total + msg.value;
         campaigns[id].contrib_total = total_contributed;
 
-        # Record new contribution
+        // Record new contribution
         uint sub_index = campaigns[id].contrib_count;
-        campaigns[id].contribs[sub_index].sender = msg.sender;
-        campaigns[id].contribs[sub_index].value = msg.value;
+        campaigns[id].contribs[sub_index] = Contrib(msg.sender, msg.value);
         campaigns[id].contrib_count = sub_index + 1;
 
-        # Enough funding?
+        // Enough funding?
         if (total_contributed >= campaigns[id].goal) {
             campaigns[id].recipient.send(total_contributed);
             clear(id);
             return 1;
         }
 
-        # Expired?
+        // Expired?
         if (block.timestamp > campaigns[id].deadline) {
             uint i = 0;
             uint c = campaigns[id].contrib_count;
@@ -1053,31 +1072,16 @@ contract testme {
         }
     }
 
-
-    # Progress report [2, id]
+    // Progress report [2, id]
     function progress_report(uint id) returns (uint) {
         return campaigns[id].contrib_total;
     }
 
-    # Clearing function for internal use
-    function clear(uint id) {
-        if (msg.sender == this) {
-            campaigns[id].recipient = 0x0;
-            campaigns[id].goal = 0;
-            campaigns[id].deadline = 0;
-
-            uint c = campaigns[id].contrib_count;
-            campaigns[id].contrib_count = 0;
-            campaigns[id].contrib_total = 0;
-
-            uint i = 0;
-            while (i < c) {
-                campaigns[id].contribs[i].sender = 0x0;
-                campaigns[id].contribs[i].value = 0;
-                i += 1;
-            }
-        }
+    // Clearing function for internal use
+    function clear(uint id) private {
+        delete campaigns[id];
     }
+}
 """
 
 
@@ -1088,30 +1092,30 @@ def test_crowdfund():
     """
 
     s = state()
-    c = s.abi_contract(crowdfund_code)  # tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt
+    c = s.abi_contract(crowdfund_code, language='solidity')  # tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt
 
     ttlblocks = 20
     ttl = ttlblocks * 1000  # block_index * 1000 for mock timestamps
 
     # Create a campaign with id 100, recipient '45', target 100000 and ttl 20 blocks
     recipient100 = address.Address(data=address.Address.normalizedata(45), version=config.ADDRESSVERSION)  # mfWxJ45yp2SFn7UciZyNpvDKrzbnzaxGAt
-    c.create_campaign(100, recipient100.int(), 100000, ttl)
+    assert c.create_campaign(100, recipient100.int(), 100000, ttl) == 1
     # Create a campaign with id 200, recipient '48', target 100000 and ttl 20 blocks
     recipient200 = address.Address(data=address.Address.normalizedata(48), version=config.ADDRESSVERSION)  # mfWxJ45yp2SFn7UciZyNpvDKrzboRgnPSZ
-    c.create_campaign(200, recipient200.int(), 100000, ttl)
+    assert c.create_campaign(200, recipient200.int(), 100000, ttl) == 1
 
     # Make some contributions to campaign 100
-    c.contribute(100, value=1, sender=tester.k1)  # mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns
+    assert c.contribute(100, value=1, sender=tester.k1) == 0  # mtQheFaSfWELRB2MyMBaiWjdDm6ux9Ezns
     assert 1 == c.progress_report(100)
-    c.contribute(100, value=59049, sender=tester.k2)  # mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj
+    assert c.contribute(100, value=59049, sender=tester.k2) == 0 # mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj
     assert 59050 == c.progress_report(100)
 
     # Make some contributions to campaign 200
-    c.contribute(200, value=30000, sender=tester.k3)  # myAtcJEHAsDLbTkai6ipWDZeeL7VkxXsiM
+    assert c.contribute(200, value=30000, sender=tester.k3) == 0  # myAtcJEHAsDLbTkai6ipWDZeeL7VkxXsiM
     assert 30000 == c.progress_report(200)
 
     # This contribution should trigger the delivery
-    c.contribute(200, value=70001, sender=tester.k4)  # munimLLHjPhGeSU5rYB2HN79LJa8bRZr5b
+    assert c.contribute(200, value=70001, sender=tester.k4) == 1  # munimLLHjPhGeSU5rYB2HN79LJa8bRZr5b
 
     # Expect the 100001 units to be delivered to the destination account for campaign 2
     assert 100001 == s.block.get_balance(recipient200)
@@ -1122,7 +1126,10 @@ def test_crowdfund():
     s.mine(ttlblocks)
 
     # Ping the campaign after expiry to trigger the refund
-    c.contribute(100, value=1, sender=tester.a0)
+    assert c.contribute(100, value=1, sender=tester.a0) == 2
+
+    # Create the campaign again, should have been deleted
+    assert c.create_campaign(100, recipient100.int(), 100000, ttl) == 1
 
     # Expect refunds
     assert mida1 + 1 == s.block.get_balance(tester.a1)
