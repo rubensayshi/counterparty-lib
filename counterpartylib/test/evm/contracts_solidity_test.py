@@ -1270,27 +1270,30 @@ def test_multiarg_code():
     assert o == [862541, ethutils.safe_ord('d') + ethutils.safe_ord('o') + ethutils.safe_ord('g'), 4]
 
 
-ecrecover_code = """
-def test_ecrecover(h, v, r, s):
-    return(ecrecover(h, v, r, s))
+def test_ecrecover():
+    """
+    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them.
+    and the result is an address.
+    """
+    ecrecover_code = """
+contract testme {
+    function test_ecrecover(bytes32 h, uint8 v, bytes32 r, bytes32 s) returns (address) {
+        return ecrecover(h, v, r, s);
+    }
+}
 """
 
 
-def test_ecrecover():
-    """
-    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them
-    """
     s = state()
     c = s.abi_contract(ecrecover_code, language='solidity')
 
-    H = 60772363713814795336605161565488663769306106990467902980560042300358765319404
+    H = ethutils.int_to_big_endian(60772363713814795336605161565488663769306106990467902980560042300358765319404)
     V = 27
-    R = 90287243237479221899775907091281500587081321452634188922390320940254754609975
-    S = 24052755845221258772445669055700842241658207900505567178705869501444775369481
-    pubkey = 794520059615976424790363096434176409370405942122
+    R = ethutils.int_to_big_endian(90287243237479221899775907091281500587081321452634188922390320940254754609975)
+    S = ethutils.int_to_big_endian(24052755845221258772445669055700842241658207900505567178705869501444775369481)
 
     result = c.test_ecrecover(H, V, R, S)
-    assert result == pubkey
+    assert result == "n4NdDG7mAJAESJ8E2E1fwmi6bnZMx1DV54"
 
 
 def test_sha256():
@@ -1538,52 +1541,6 @@ contract testme {
     c = s.abi_contract(double_array_code, language='solidity')
     assert c.foo([1, 2, 3], [4, 5, 6, 7]) == [123, 4567]
     assert c.bar([1, 2, 3], "moo", [4, 5, 6, 7]) == [123, 4567]
-
-
-def test_abi_logging():
-    abi_logging_code = """
-event rabbit(x)
-event frog(y:indexed)
-event moose(a, b:str, c:indexed, d:arr)
-event chicken(m:address:indexed)
-
-def test_rabbit(eks):
-    log(type=rabbit, eks)
-
-def test_frog(why):
-    log(type=frog, why)
-
-def test_moose(eh, bee:str, see, dee:arr):
-    log(type=moose, eh, bee, see, dee)
-
-def test_chicken(em:address):
-    log(type=chicken, em)
-"""
-
-    s = state()
-
-    o = []
-    s.log_listeners.append(lambda log: o.append(c._translator.listen(log)))
-
-    c = s.abi_contract(abi_logging_code, language='solidity')
-
-    c.test_rabbit(3)
-    assert o == [{"_event_type": b"rabbit", "x": 3}]
-    o.pop()
-
-    c.test_frog(5)
-    assert o == [{"_event_type": b"frog", "y": 5}]
-    o.pop()
-
-    c.test_moose(7, "nine", 11, [13, 15, 17])
-    assert o == [{"_event_type": b"moose", "a": 7, "b": b"nine",
-                  "c": 11, "d": [13, 15, 17]}]
-    o.pop()
-
-    c.test_chicken(tester.a0)
-    assert o == [{"_event_type": b"chicken",
-                  "m": tester.a0}]
-    o.pop()
 
 
 def test_abi_address_output():
