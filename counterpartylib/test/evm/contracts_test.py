@@ -1557,7 +1557,7 @@ def test_prevhashes():
     s = state()
     c = s.abi_contract(prevhashes_code)
 
-    assert c.get_prevhash(1) == ""
+    assert ethutils.intc.get_prevhash(1) == ""
 
     # Hashes of last 14 blocks including existing one
     o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
