@@ -350,7 +350,7 @@ UNITTEST_VECTOR = {
         }],
         'get_next_tx_index': [{
             'in': (),
-            'out': 498
+            'out': 499
         }],
         'last_db_index': [{
             'in': (),
@@ -3032,17 +3032,19 @@ UNITTEST_VECTOR = {
         }],
         'last_message': [{
             'in': (),
-            'out': {'bindings': '{"asset": "XCP", "block_index": 310496, "destination": '
-                            '"mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj", "quantity": 92945878046, '
-                            '"source": "mnfAHmddVibnZNSkh8DvKaQoiEfNsxjXzH", "status": '
-                            '"valid", "tx_hash": '
-                            '"54f4c7b383ea19147e62d2be9f3e7f70b6c379baac15e8b4cf43f7c21578c1ef", '
-                            '"tx_index": 497}',
-                    'block_index': 310496,
-                    'category': 'sends',
-                    'command': 'insert',
-                    'message_index': 100,
-                    'timestamp': 0}
+            'out': {'bindings': '{"block_index": 310497, "contract_id": null, "gas_cost": '
+                            '71916, "gas_remained": 928084, "gasprice": 1, "output": '
+                            '"tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt", "payload": '
+                            '"604a80600b6000396055567c0100000000000000000000000000000000000000000000000000000000600035046397d857aa8114156048576004356040526024356060526060516040510a60805260206080f35b505b6000f3", '
+                            '"source": "mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc", "startgas": '
+                            '1000000, "status": "valid", "tx_hash": '
+                            '"87a2f442d79648a21cbace5c13a50cd2e400d74e1469cfb063a7061e3e44e5f4", '
+                            '"tx_index": 498, "value": 0}',
+                'block_index': 310497,
+                'category': 'executions',
+                'command': 'insert',
+                'message_index': 103,
+                'timestamp': 0}
         }],
         'get_asset_id': [{
             'in': ('XCP', DP['default_block_index']),
@@ -3172,7 +3174,7 @@ UNITTEST_VECTOR = {
         }],
         'get_balance': [{
             'in': (ADDR[0], 'XCP'),
-            'out': 91950000000
+            'out': 91949928084
         }, {
             'in': (ADDR[0], 'foobar'),
             'out': 0
