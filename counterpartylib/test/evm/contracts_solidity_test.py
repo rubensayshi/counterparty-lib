@@ -1136,7 +1136,46 @@ def test_crowdfund():
     assert mida3 + 59049 == s.block.get_balance(tester.a2)
 
 
-@pytest.mark.skip(reason="negative")
+def test_ints():
+    sdiv_code = """
+contract testme {
+    function addone256(uint256 k) returns (uint256) {
+        return k + 1;
+    }
+    function subone256(uint256 k) returns (uint256) {
+        return k - 1;
+    }
+    function addone8(uint8 k) returns (uint8) {
+        return k + 1;
+    }
+    function subone8(uint8 k) returns (uint8) {
+        return k - 1;
+    }
+}
+"""
+
+    s = state()
+    c = s.abi_contract(sdiv_code, language='solidity')
+
+    # test uint8
+    MAX8 = 255  # 2 ** 8 - 1
+    assert c.addone8(1) == 2
+    assert c.addone8(MAX8 - 1) == MAX8
+    assert c.addone8(MAX8) == 0
+    assert c.subone8(1) == 0
+    assert c.subone8(0) == MAX8
+
+    # test uint256
+    MAX256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935  # 2 ** 256 - 1
+    assert c.addone256(1) == 2
+    assert c.addone256(MAX8 - 1) == MAX8
+    assert c.addone256(MAX8) == MAX8 + 1
+    assert c.addone256(MAX256 - 1) == MAX256
+    assert c.addone256(MAX256) == 0
+    assert c.subone256(1) == 0
+    assert c.subone256(0) == MAX256
+
+
 def test_sdiv():
     sdiv_code = """
 contract testme {
@@ -1148,7 +1187,7 @@ contract testme {
 
     s = state()
     c = s.abi_contract(sdiv_code, language='solidity')
-    assert [57896044618658097711785492504343953926634992332820282019728792003956564819968, -4, -2] == c.kall()
+    assert [57896044618658097711785492504343953926634992332820282019728792003956564819968, 4, 2] == c.kall()
 
 
 def test_argcall():
