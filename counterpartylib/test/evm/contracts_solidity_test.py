@@ -1699,37 +1699,48 @@ contract testme {
     assert c.get_address(125) == tester.a2
 
 
-def test_string_logging():
-    string_logging_code = """
+def test_raw_logging():
+    raw_logging_code = """
 contract testme {
-    event foo {
-        string x;
-        string y;
-    }
-
     function moo() {
-        log 0(0, 0);
-        log 1(0, 0, "t1");
-        log 1(0, 0, "t1", "t2");
-
-        foo("x", "y");
+        log0("msg1");
+        log1("msg2", "t1");
+        log2("msg3", "t1", "t2");
     }
 }
 """
 
     s = state()
-    c = s.abi_contract(string_logging_code, language='solidity')
+    c = s.abi_contract(raw_logging_code, language='solidity')
     o = []
+    s.log_listeners.append(lambda x: o.append(x))
 
-    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
     c.moo()
 
-    assert o == [{
-        "_event_type": b"foo",
-        "x": b"bob",
-        "__hash_x": ethutils.sha3("bob"),
-        "y": b"cow",
-        "__hash_y": ethutils.sha3("cow"),
-        "z": b"dog",
-        "__hash_z": ethutils.sha3("dog")
-    }]
+    assert o[0].data == b'msg1'
+    assert o[1].data == b'msg2'
+    assert o[2].data == b'msg3'
+
+
+def test_event_logging():
+    event_logging_code = """
+contract testme {
+    event foo(
+        string x,
+        string y
+    );
+
+    function moo() {
+        foo("bob", "cow");
+    }
+}
+"""
+
+    s = state()
+    c = s.abi_contract(event_logging_code, language='solidity')
+    o = []
+    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+
+    c.moo()
+
+    assert o == [{"_event_type": b"foo", "x": b"bob", "y": b"cow"}]
