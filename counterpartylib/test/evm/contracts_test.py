@@ -1181,14 +1181,35 @@ def test_saveload2():
 
 sdiv_code = """
 def kall():
-    return([2^255 / 2^253, 2^255 % 3]:arr)
+    return([2^255, 2^255 / 2^253, 2^255 % 3]:arr)
 """
 
 
 def test_sdiv():
     s = state()
     c = s.abi_contract(sdiv_code)
-    assert [-4, -2] == c.kall()
+    assert [-57896044618658097711785492504343953926634992332820282019728792003956564819968, -4, -2] == c.kall()
+
+
+def test_ints():
+    sdiv_code = """
+def addone256(k:uint256):
+    return (k + 1:uint256)
+
+def subone256(k:uint256):
+    return (k - 1:uint256)
+"""
+
+    s = state()
+    c = s.abi_contract(sdiv_code, language='serpent')
+
+    # test uint256
+    MAX256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935  # 2 ** 256 - 1
+    assert c.addone256(1) == 2
+    assert c.addone256(MAX256 - 1) == MAX256
+    assert c.addone256(MAX256) == 0
+    assert c.subone256(1) == 0
+    assert c.subone256(0) == MAX256
 
 
 basic_argcall_code = """
