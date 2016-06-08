@@ -319,7 +319,7 @@ def check_record(record, server_db):
 
         count = list(cursor.execute(sql, tuple(bindings)))[0]['c']
         if count != 1:
-            if pytest.config.option.verbosediff:
+            if pytest.config.getoption('verbose') >= 2:
                 pprint.PrettyPrinter(indent=4).pprint(record['values'])
                 pprint.PrettyPrinter(indent=4).pprint(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
 
@@ -393,7 +393,7 @@ def check_outputs(tx_name, method, inputs, outputs, error, records, comment, moc
         try:
             assert outputs == test_outputs
         except AssertionError:
-            if pytest.config.option.verbosediff:
+            if pytest.config.getoption('verbose') >= 2:
                 msg = "expected outputs don't match test_outputs:\noutputs=\n" + pprint.pformat(outputs) + "\ntest_outputs=\n" + pprint.pformat(test_outputs)
             else:
                 msg = "expected outputs don't match test_outputs: outputs=%s test_outputs=%s" % (outputs, test_outputs)
