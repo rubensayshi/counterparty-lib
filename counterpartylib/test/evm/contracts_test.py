@@ -1409,16 +1409,16 @@ def test_types():
     assert ethutils.big_endian_to_int(s.send(tester.k0, c, 0)) == 5
 
 
-ecrecover_code = """
-def test_ecrecover(h, v, r, s):
+def test_ecrecover():
+    """
+    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them.
+    and the result is an address.
+    """
+    ecrecover_code = """
+def test_ecrecover(h:uint256, v:uint256, r:uint256, s:uint256):
     return(ecrecover(h, v, r, s))
 """
 
-
-def test_ecrecover():
-    """
-    this is the original test_ecrecover from pyethereum but instead of generating the H,V,R,S we just hardcoded them
-    """
     s = state()
     c = s.abi_contract(ecrecover_code)
 
@@ -1426,10 +1426,11 @@ def test_ecrecover():
     V = 27
     R = 90287243237479221899775907091281500587081321452634188922390320940254754609975
     S = 24052755845221258772445669055700842241658207900505567178705869501444775369481
-    pubkey = 794520059615976424790363096434176409370405942122
 
     result = c.test_ecrecover(H, V, R, S)
-    assert result == pubkey
+    addr = address.Address.normalize(result)
+
+    assert addr.base58() == "n4NdDG7mAJAESJ8E2E1fwmi6bnZMx1DV54"
 
 
 sha256_code = """
@@ -1557,7 +1558,7 @@ def test_prevhashes():
     s = state()
     c = s.abi_contract(prevhashes_code)
 
-    assert ethutils.intc.get_prevhash(1) == ""
+    assert ethutils.c.get_prevhash(1) == ""
 
     # Hashes of last 14 blocks including existing one
     o1 = [x % 2 ** 256 for x in c.get_prevhashes(14)]
