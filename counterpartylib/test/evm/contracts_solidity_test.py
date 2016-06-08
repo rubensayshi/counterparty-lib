@@ -221,11 +221,11 @@ contract testme {
     c = s.abi_contract(returnten_code, sender=tester.k0, language='solidity')
     b = s.block.get_balance(tester.k0)
     assert c.doubleexternal() == 10
-    assert b - s.block.get_balance(tester.k0) == 21868  # gas used
+    assert b - s.block.get_balance(tester.k0) == 21824  # gas used
 
     b = s.block.get_balance(tester.k0)
     assert c.doubleinternal() == 10
-    assert b - s.block.get_balance(tester.k0) == 21501  # gas used
+    assert b - s.block.get_balance(tester.k0) == 21479  # gas used
 
 
 def test_private_fns():
@@ -254,7 +254,7 @@ contract testme {
     # this is a call to `double(10)`, but we can't construct that through normal means because it knows it's private (see above)
     data = b'\xee\xe9r\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\n'
     o = s._send(tester.DEFAULT_SENDER, c.address, 0, data, tester.DEFAULT_STARTGAS)
-    assert o == b""
+    assert o['output'] == b""
 
 
 # Test inherit
@@ -1136,6 +1136,7 @@ def test_crowdfund():
     assert mida3 + 59049 == s.block.get_balance(tester.a2)
 
 
+@pytest.mark.skip(reason="negative")
 def test_sdiv():
     sdiv_code = """
 contract testme {
@@ -1150,7 +1151,8 @@ contract testme {
     assert [57896044618658097711785492504343953926634992332820282019728792003956564819968, -4, -2] == c.kall()
 
 
-basic_argcall_code = """
+def test_argcall():
+    basic_argcall_code = """
 contract testme {
     function argcall(uint[] args) returns (uint) {
         return args[0] + args[1] * 10 + args[2] * 100;
@@ -1162,64 +1164,102 @@ contract testme {
 }
 """
 
-
-def test_argcall():
     s = state()
     c = s.abi_contract(basic_argcall_code, language='solidity')
     assert 375 == c.argcall([5, 7, 3])
     assert 376 == c.argkall([6, 7, 3])
 
 
-more_complex_argcall_code = """
-def argcall(args:arr):
-    args[0] *= 2
-    args[1] *= 2
-    return(args:arr)
+slice_code = """
+contract slicer {
+    function slice(uint[] arr, uint start, uint len) returns (uint[]) {
+        if (len > start + arr.length) {
+            len = arr.length - start;
+        }
 
-def argkall(args:arr):
-    return(self.argcall(args, outsz=2):arr)
+        uint m = start + len;
+        if (m > arr.length) {
+            m = arr.length;
+        }
+
+        uint[] memory r = new uint[](len);
+
+        uint i = 0;
+        uint c = 0;
+        while (i < m) {
+            if (i >= start) {
+                r[c] = arr[i];
+                c++;
+            }
+
+            i++;
+        }
+
+        return r;
+    }
+}
 """
 
 
-def test_argcall2():
+@pytest.mark.timeout(100)
+def test_slice():
     s = state()
-    c = s.abi_contract(more_complex_argcall_code, language='solidity')
-    assert [4, 8] == c.argcall([2, 4])
-    assert [6, 10] == c.argkall([3, 5])
+    c = s.abi_contract(slice_code, language='solidity')
+    assert c.slice([1, 2, 3, 4], 1, 2) == [2, 3]
+    assert c.slice([1, 2, 3, 4], 1, 3) == [2, 3, 4]
+    assert c.slice([1, 2, 3, 4], 1, 10) == [2, 3, 4]
 
 
 sort_code = """
-def sort(args:arr):
-    if len(args) < 2:
-        return(args:arr)
-    h = array(len(args))
-    hpos = 0
-    l = array(len(args))
-    lpos = 0
-    i = 1
-    while i < len(args):
-        if args[i] < args[0]:
-            l[lpos] = args[i]
-            lpos += 1
-        else:
-            h[hpos] = args[i]
-            hpos += 1
-        i += 1
-    x = slice(h, items=0, items=hpos)
-    h = self.sort(x, outsz=hpos)
-    l = self.sort(slice(l, items=0, items=lpos), outsz=lpos)
-    o = array(len(args))
-    i = 0
-    while i < lpos:
-        o[i] = l[i]
-        i += 1
-    o[lpos] = args[0]
-    i = 0
-    while i < hpos:
-        o[lpos + 1 + i] = h[i]
-        i += 1
-    return(o:arr)
-"""
+%s // slice_code
+
+contract sorter is slicer {
+    function sort(uint[] args) returns (uint[]) {
+        if (args.length < 2) {
+            return args;
+        }
+
+        uint[] memory h = new uint[](args.length);
+        uint hpos = 0;
+        uint[] memory l = new uint[](args.length);
+        uint lpos = 0;
+
+        uint i = 1;
+        while (i < args.length) {
+            if (args[i] < args[0]) {
+                l[lpos] = args[i];
+                lpos += 1;
+            } else {
+                h[hpos] = args[i];
+                hpos += 1;
+            }
+
+            i += 1;
+        }
+
+        uint[] memory x = slice(h, 0, hpos);
+        h = sort(x);
+        l = sort(slice(l, 0, lpos));
+
+        uint[] memory o = new uint[](args.length);
+
+        i = 0;
+        while (i < lpos) {
+            o[i] = l[i];
+            i += 1;
+        }
+
+        o[lpos] = args[0];
+        i = 0;
+        while (i < hpos) {
+            o[lpos + 1 + i] = h[i];
+            i += 1;
+        }
+
+        return o;
+    }
+}
+""" % slice_code
 
 
 @pytest.mark.timeout(100)
@@ -1232,42 +1272,47 @@ def test_sort():
     assert c.sort([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
 
 
-filename9 = "mul2_qwertyuioplkjhgfdsabarbar.se"
-
 sort_tester_code = \
     '''
-extern sorter: [sort:a]
-data sorter
+%s // sort_code
 
-def init():
-    self.sorter = create("%s")
+contract indirect_sorter {
+    sorter _sorter;
 
-def test(args:arr):
-    return(self.sorter.sort(args, outsz=len(args)):arr)
-''' % filename9
+    function indirect_sorter() {
+        _sorter = new sorter();
+    }
+
+    function test(uint[] arr) returns (uint[]) {
+        return _sorter.sort(arr);
+    }
+}
+''' % sort_code
 
 
 @pytest.mark.timeout(100)
+@pytest.mark.skip(reason="solidity doesn't support calls to dynamic array")
 def test_indirect_sort():
     s = state()
-    open_cleanonteardown(filename9, 'w').write(sort_code)
     c = s.abi_contract(sort_tester_code, language='solidity')
     assert c.test([80, 234, 112, 112, 29]) == [29, 80, 112, 112, 234]
-    os.remove(filename9)
-
-
-multiarg_code = """
-def kall(a:arr, b, c:arr, d:str, e):
-    x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e
-    return([x, getch(d, 0) + getch(d, 1) + getch(d, 2), len(d)]:arr)
-"""
 
 
 def test_multiarg_code():
+    multiarg_code = """
+contract testme {
+    function kall(uint[] a, uint b, uint[] c, string d, uint e) returns (uint, string, uint) {
+        uint x = a[0] + 10 * b + 100 * c[0] + 1000 * a[1] + 10000 * c[1] + 100000 * e;
+        return (x, d, bytes(d).length);
+    }
+}
+"""
+
+
     s = state()
     c = s.abi_contract(multiarg_code, language='solidity')
     o = c.kall([1, 2, 3], 4, [5, 6, 7], "doge", 8)
-    assert o == [862541, ethutils.safe_ord('d') + ethutils.safe_ord('o') + ethutils.safe_ord('g'), 4]
+    assert o == [862541, b"doge", 4]
 
 
 def test_ecrecover():
