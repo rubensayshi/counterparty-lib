@@ -193,7 +193,7 @@ class VMExt(VmExtBase):
         self._block = block
 
         def block_hash(x):
-            logger.warn('block_hash %s' % x)
+            logger.warn('block_hash %s %s %s %s' % (x, x > 0, x > block.number - 256, x <= block.number))
             if x > 0 and x > block.number - 256 and x <= block.number:
                 return binascii.unhexlify(block.get_block_hash(x))
             else:
