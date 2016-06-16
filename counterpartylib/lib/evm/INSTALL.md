@@ -7,6 +7,7 @@ sudo apt-add-repository -y ppa:george-edison55/cmake-3.x
 
 sudo apt-get -y update
 sudo apt-get -y install language-pack-en-base
+sudo apt-get -y install gcc-4.8
 sudo dpkg-reconfigure locales
 sudo apt-get -y install software-properties-common
 
