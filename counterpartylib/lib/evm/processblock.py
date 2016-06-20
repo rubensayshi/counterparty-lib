@@ -186,6 +186,13 @@ def apply_transaction(db, block, tx):
 
         revert = not success
         return success, output, gas_remained
+
+    # all exceptions will result in a revert
+    except Exception as e:
+        revert = True
+        raise e
+
+    # always either revert or release
     finally:
         # check to make sure any changes don't result in excidently returning before setting `revert`
         if revert is None:
@@ -310,6 +317,7 @@ def create_contract(db, tx, ext, msg):
         raise exceptions.SnapshotRequired("create_contract should only be called with a snapshot surrounding it")
 
     if ext.tx_origin != msg.sender:
+        raise Exception("%s != %s" % (ext.tx_origin, msg.sender))
         ext._block.increment_nonce(msg.sender)
 
     nonce = ethutils.encode_int(ext._block.get_nonce(msg.sender) - 1)
