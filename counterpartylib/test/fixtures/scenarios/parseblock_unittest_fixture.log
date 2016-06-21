@@ -236,3 +236,30 @@ Change quantity: 1.9340437 BTC
 Debit: 929.45878046 XCP from mnfAHmddVibnZNSkh8DvKaQoiEfNsxjXzH #send# <54f4c7b383ea19147e62d2be9f3e7f70b6c379baac15e8b4cf43f7c21578c1ef>
 Credit: 929.45878046 XCP to mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj #send# <54f4c7b383ea19147e62d2be9f3e7f70b6c379baac15e8b4cf43f7c21578c1ef>
 Send: 929.45878046 XCP from mnfAHmddVibnZNSkh8DvKaQoiEfNsxjXzH to mqPCfvqTfYctXMUfmniXeG2nyaN8w6tPmj (54f4c7b383ea19147e62d2be9f3e7f70b6c379baac15e8b4cf43f7c21578c1ef) [valid]
+Sorted candidate UTXOs: ['amount: 1.9990914; txid: ae241be7be83ebb14902757ad94854f787d9730fc553d6f695346c9375c0d8c1; vout: 0; confirmations: 74']
+New input: amount: 1.9990914; txid: ae241be7be83ebb14902757ad94854f787d9730fc553d6f695346c9375c0d8c1; vout: 0; confirmations: 74
+Change quantity: 1.9983941 BTC
+Debit: 0.01 XCP from mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc #startgas# <5ffe7b4e75ab94d3548df7616c87a96f04afaf24d3d082a069ab3136ce290265>
+SNAPSHOT S13766c2342a5081eea325923ffa04aca
+[tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt] b''
+have: 0
+New Contract: tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt
+SNAPSHOT Sf0d1cffe06a00f93443626e4b4440da5
+Debit: 0.0 XCP from mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc #transfer value# <5ffe7b4e75ab94d3548df7616c87a96f04afaf24d3d082a069ab3136ce290265>
+Credit: 0.0 XCP to tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt #transfer value# <5ffe7b4e75ab94d3548df7616c87a96f04afaf24d3d082a069ab3136ce290265>
+vm PUSH1 address=tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt, depth=0, gas=b'942932', inst=96, op=PUSH1, pc=b'0', pushvalue=74, stack=[], steps=0, storage=0
+vm DUP1 gas=b'942929', inst=128, op=DUP1, pc=b'2', stack=[b'74'], steps=1
+vm PUSH1 gas=b'942926', inst=96, op=PUSH1, pc=b'3', pushvalue=11, stack=[b'74', b'74'], steps=2
+vm PUSH1 gas=b'942923', inst=96, op=PUSH1, pc=b'5', pushvalue=0, stack=[b'74', b'74', b'11'], steps=3
+vm CODECOPY gas=b'942920', inst=57, op=CODECOPY, pc=b'7', stack=[b'74', b'74', b'11', b'0'], steps=4
+vm PUSH1 gas=b'942899', inst=96, memory=b'7c0100000000000000000000000000000000000000000000000000000000600035046397d857aa8114156048576004356040526024356060526060516040510a60805260206080f35b5000000000000000000000000000000000000000000000', op=PUSH1, pc=b'8', pushvalue=85, stack=[b'74'], steps=5
+vm JUMP gas=b'942896', inst=86, op=JUMP, pc=b'10', stack=[b'74', b'85'], steps=6
+vm JUMPDEST gas=b'942888', inst=91, op=JUMPDEST, pc=b'85', stack=[b'74'], steps=7
+vm PUSH1 gas=b'942887', inst=96, op=PUSH1, pc=b'86', pushvalue=0, stack=[b'74'], steps=8
+vm RETURN gas=b'942884', inst=243, op=RETURN, pc=b'88', stack=[b'74', b'0'], steps=9
+EXIT cause=RETURN
+[tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt] b'|\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00`\x005\x04c\x97\xd8W\xaa\x81\x14\x15`HW`\x045`@R`$5``R``Q`@Q\n`\x80R` `\x80\xf3[P'
+have: 1
+Credit: 0.00928084 XCP to mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc #startgas# <5ffe7b4e75ab94d3548df7616c87a96f04afaf24d3d082a069ab3136ce290265>
+TX FINISHED (gas_remained: 928084)
+Execution: mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc created contract tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt (5ffe7b4e75ab94d3548df7616c87a96f04afaf24d3d082a069ab3136ce290265) [valid]
