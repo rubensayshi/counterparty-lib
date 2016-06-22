@@ -16,6 +16,7 @@ RUN apt-get -y update && apt-get -y install build-essential cmake libboost-all-d
     libargtable2-dev libedit-dev mesa-common-dev ocl-icd-libopencl1 opencl-headers \
     libgoogle-perftools-dev ocl-icd-dev libv8-dev libz-dev libjsonrpccpp-dev
 
+
 # Install counterparty-lib
 COPY . /counterparty-lib
 WORKDIR /counterparty-lib
