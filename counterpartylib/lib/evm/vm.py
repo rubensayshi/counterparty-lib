@@ -77,7 +77,7 @@ class Message(object):
         return '<Message(to:%s...)>' % str(self.to)[:8]
 
 
-class Compustate():
+class Compustate(object):
 
     def __init__(self, **kwargs):
         self.memory = []

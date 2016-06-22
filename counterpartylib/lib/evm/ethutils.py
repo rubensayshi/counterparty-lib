@@ -171,3 +171,18 @@ def hexprint(x):
         return ('0x' + util.hexlify(bytes(x)))
     else:
         return 'OUT OF GAS'
+
+
+def parse_int_or_hex(s):
+    if is_numeric(s):
+        return s
+    elif s[:2] in (b'0x', '0x'):
+        s = to_string(s)
+        tail = (b'0' if len(s) % 2 else b'') + s[2:]
+        return big_endian_to_int(decode_hex(tail))
+    else:
+        return int(s)
+
+
+def encode_int_to_hex(s):
+    return encode_hex(int_to_big_endian(s))

@@ -214,6 +214,8 @@ def address_asserts(a):
     assert a.version == b'\x6f'
     assert a.data == b'H8\xd8\xb3X\x8cL{\xa7\xc1\xd0o\x86n\x9b79\xc607'
 
+    assert a.datahexbytes() == b'4838d8b3588c4c7ba7c1d06f866e9b3739c63037'
+    assert a.datahexstr() == '4838d8b3588c4c7ba7c1d06f866e9b3739c63037'
     assert a.base58() == 'mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc'
     assert a.hexbytes() == b'6f4838d8b3588c4c7ba7c1d06f866e9b3739c63037'
     assert a.hexstr() == '6f4838d8b3588c4c7ba7c1d06f866e9b3739c63037'

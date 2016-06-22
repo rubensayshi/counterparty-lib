@@ -175,6 +175,9 @@ class Block(object):
 
         logger.getChild('set_storage_data').debug('[%s] %s: %s' % (contract_id.base58(), key, value))
 
+        if not value:
+            return None
+
         key = key.to_bytes(32, byteorder='big')
         value = value.to_bytes(32, byteorder='big')
 

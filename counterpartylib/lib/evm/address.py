@@ -57,6 +57,12 @@ class Address(object):
     def hexbytes(self):
         return binascii.hexlify(self.bytes())
 
+    def datahexbytes(self):
+        return binascii.hexlify(self.data)
+
+    def datahexstr(self):
+        return self.datahexbytes().decode('ascii')
+
     def hexstr(self):
         return self.hexbytes().decode('ascii')
 
