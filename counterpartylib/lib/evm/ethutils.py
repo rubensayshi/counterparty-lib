@@ -186,3 +186,11 @@ def parse_int_or_hex(s):
 
 def encode_int_to_hex(s):
     return encode_hex(int_to_big_endian(s))
+
+
+def encode_int_to_hexstr(s):
+    return encode_int_to_hex(s).decode('ascii')
+
+
+def encode_hexstr(s):
+    return encode_hex(s).decode('ascii')

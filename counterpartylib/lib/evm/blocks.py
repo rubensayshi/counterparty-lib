@@ -57,20 +57,25 @@ class Snapshot(object):
 
 
 class Block(object):
-    def __init__(self, db, block_hash):
+    def __init__(self, db, block_hash, **kwargs):
         self.db = db
 
         cursor = db.cursor()
         block = list(cursor.execute('''SELECT * FROM blocks WHERE block_hash = ?''', (block_hash,)))[0]
         cursor.close()
 
+        # make sure no unknown kwargs are passed
+        assert len(set(kwargs.keys()) - set(['timestamp', 'number', 'coinbase_address', 'gas_limit', 'difficulty'])) == 0
+
         self.block_index = block['block_index']
         self.block_hash = block['block_hash']
-        self.block_time = block['block_time']
-        self.timestamp = block['block_time']
-        self.number = block['block_index']
+        self.block_time = kwargs.get('timestamp', block['block_time'])
+        self.timestamp = self.block_time
+        self.number = kwargs.get('number', block['block_index'])
         self.prevhash = block['previous_block_hash']
-        self.gas_limit = GAS_LIMIT
+        self.coinbase = Address.normalize(kwargs.get('coinbase_address', Address.nulladdress()))
+        self.gas_limit = kwargs.get('gas_limit', GAS_LIMIT)
+        self.difficulty = kwargs.get('difficulty', 0)
 
         self.log_listeners = []
         self.log_listeners.append(lambda log: logger.getChild('log').debug(str(log)))

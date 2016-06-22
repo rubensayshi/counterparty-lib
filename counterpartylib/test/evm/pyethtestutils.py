@@ -6,9 +6,10 @@ import copy
 import json
 import os
 import time
+import glob
 
 from counterpartylib.lib import config
-from counterpartylib.lib.evm import ethutils, opcodes, vm, processblock, transactions, blocks
+from counterpartylib.lib.evm import ethutils, opcodes, vm, processblock, transactions, blocks, address
 from counterpartylib.lib.evm.address import Address
 
 env = {
@@ -80,15 +81,13 @@ def compare_post_states(shouldbe, reallyis):
         s = acct_standard_form(shouldbe[k])
         if s != r:
             if pytest.config.getoption('verbose') >= 2:
-                r = pprint.pformat(r)
-                s = pprint.pformat(s)
                 raise Exception("Key %r \n"
                                 "====================================== \n"
                                 "shouldbe: \n"
                                 "%s\n\n"
                                 "====================================== \n"
                                 "reallyis: \n"
-                                "%s" % (k, s, r))
+                                "%s" % (k, pprint.pformat(s), pprint.pformat(r)))
 
             else:
                 raise Exception("Key %r\n\nshouldbe: %r \n\nreallyis: %r" %
@@ -104,11 +103,18 @@ def callcreate_standard_form(c):
     }
 
 
-def normalize_address(address, is_contract=False):
-    return Address(data=Address.normalizedata(address), version=config.ADDRESSVERSION if not is_contract else config.CONTRACT_ADDRESSVERSION)
+def normalize_address(addr, is_contract=False):
+    return Address(data=Address.normalizedata(addr), version=config.ADDRESSVERSION if not is_contract else config.CONTRACT_ADDRESSVERSION)
 
+"""
+ethereum fixtures have our limit (2**63 - 1)
+so we ceil the balances
+"""
+BALANCE_MOD = config.MAX_INT
+def ceil_balance(b):
+    b = ethutils.parse_int_or_hex(b)
+    return b % BALANCE_MOD
 
-BALANCE_MOD = 10000000000000000000
 
 # Fills up a vm test without post data, or runs the test
 def run_vm_test(state, params, mode, profiler=None):
@@ -124,47 +130,61 @@ def run_vm_test(state, params, mode, profiler=None):
     pre = params['pre']
     exek = params['exec']
     env = params['env']
-    # if 'previousHash' not in env:
-    #     env['previousHash'] = encode_hex(db_env.config['GENESIS_PREVHASH'])
+    if 'previousHash' not in env:
+        env['previousHash'] = encode_hex(b'\x00' * 32)
 
-    # assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
-    #                                'previousHash', 'currentCoinbase',
-    #                                'currentDifficulty', 'currentNumber'])
-    # setup env
+    assert set(env.keys()) == set(['currentGasLimit', 'currentTimestamp',
+                                   'previousHash', 'currentCoinbase',
+                                   'currentDifficulty', 'currentNumber'])
 
     blk = state.mine()
-
-    # header = blocks.BlockHeader(
-    #     prevhash=decode_hex(env['previousHash']),
-    #     number=ethutils.parse_int_or_hex(env['currentNumber']),
-    #     coinbase=decode_hex(env['currentCoinbase']),
-    #     difficulty=ethutils.parse_int_or_hex(env['currentDifficulty']),
-    #     gas_limit=ethutils.parse_int_or_hex(env['currentGasLimit']),
-    #     timestamp=ethutils.parse_int_or_hex(env['currentTimestamp']))
-    # blk = blocks.Block(header, env=db_env)
 
     # setup state
     address_is_contract = {}
-    for address, h in list(pre.items()):
-        assert len(address) == 40
-        address = decode_hex(address)
+    for addr, h in list(pre.items()):
+        _addr = addr
+        assert len(addr) == 40
+        addr = decode_hex(addr)
         assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
-        address_is_contract[address] = h['code'] is not None or h['storage'] is not None
-        address = normalize_address(address, is_contract=address_is_contract[address])
+        address_is_contract[addr] = h['code'] is not None or h['storage'] is not None
+        addr = normalize_address(addr, is_contract=address_is_contract[addr])
 
-        blk.set_nonce(address, ethutils.parse_int_or_hex(h['nonce']))
-        state.set_balance(address, ethutils.parse_int_or_hex(h['balance']) % BALANCE_MOD)
+        print('pre', _addr, addr.base58(), addr.int())
+
+        blk.set_nonce(addr, ethutils.parse_int_or_hex(h['nonce']))
+
+        # set ceiled balance
+        state.set_balance(addr, ceil_balance(h['balance']))
 
         if h['code']:
-            _, tx, blk = state.mock_tx(sender=address, to=address, value=0, data=b'')
-            blk.set_code(tx, address, decode_hex(h['code'][2:]))
+            _, tx, blk = state.mock_tx(sender=addr, to=addr, value=0, data=b'')
+            blk.set_code(tx, addr, decode_hex(h['code'][2:]))
 
         for k, v in h['storage'].items():
-            blk.set_storage_data(address,
+            blk.set_storage_data(addr,
                                  ethutils.big_endian_to_int(decode_hex(k[2:])),
                                  ethutils.big_endian_to_int(decode_hex(v[2:])))
 
-    blk = state.mine()
+    # ceil the balances for the post state
+    for addr, h in list(params.get('post', {}).items()):
+        _addr = addr
+        assert len(addr) == 40
+        addr = decode_hex(addr)
+        assert set(h.keys()) == set(['code', 'nonce', 'balance', 'storage'])
+        address_is_contract[addr] = address_is_contract.get(addr, False) or h['code'] is not None or h['storage'] is not None
+        addr = normalize_address(addr, is_contract=address_is_contract[addr])
+
+        print('post', _addr, addr.base58(), addr.int())
+
+        params['post'][_addr]['balance'] = encode_int_to_hex_with_prefix(ceil_balance(h['balance']))
+
+    blk = state.mine(
+        number=ethutils.parse_int_or_hex(env['currentNumber']),
+        coinbase_address=normalize_address(decode_hex(env['currentCoinbase']), is_contract=False),
+        difficulty=ethutils.parse_int_or_hex(env['currentDifficulty']),
+        gas_limit=ethutils.parse_int_or_hex(env['currentGasLimit']),
+        timestamp=ethutils.parse_int_or_hex(env['currentTimestamp'])
+    )
 
     # execute transactions
     sender = decode_hex(exek['caller'])  # a party that originates a call
@@ -199,15 +219,19 @@ def run_vm_test(state, params, mode, profiler=None):
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=ethutils.to_string(msg.gas),
                                         value=ethutils.to_string(msg.value),
-                                        destination=encode_hex(msg.to),
+                                        destination=encode_hex(msg.to.data),
                                         data=b'0x' + hexdata))
         return 1, msg.gas, b''
 
     def create_wrapper(msg):
-        sender = decode_hex(msg.sender) if \
-            len(msg.sender) == 40 else msg.sender
+        sender = msg.sender
         nonce = ethutils.encode_int(ext._block.get_nonce(msg.sender))
-        addr = ethutils.sha3(rlp.encode([sender, nonce]))[12:]
+
+        # addr = address.mk_contract_address(sender, nonce, version=config.CONTRACT_ADDRESSVERSION)
+        # use ethereum-style contract address creation to match the fixtures
+        addr = ethutils.sha3(rlp.encode([sender.data, nonce]))[12:]
+        addr = Address(data=addr, version=config.CONTRACT_ADDRESSVERSION)
+
         hexdata = encode_hex(msg.data.extract_all())
         apply_message_calls.append(dict(gasLimit=ethutils.to_string(msg.gas),
                                         value=ethutils.to_string(msg.value),
@@ -257,29 +281,24 @@ def run_vm_test(state, params, mode, profiler=None):
         params2['post'] = {}
 
         # construct post state
-        for address, h in list(params['post'].items()):
-            assert len(address) == 40
-            address = decode_hex(address)
-            address = normalize_address(address, is_contract=address_is_contract[address])
+        for addr, h in list(params.get('post', {}).items()):
+            _addr = addr
+            assert len(addr) == 40
+            addr = decode_hex(addr)
+            addr = normalize_address(addr, is_contract=address_is_contract[addr])
 
-            # check the difference after the % BALANCE_MOD
-            bpre = ethutils.parse_int_or_hex(params['pre'][address.datahexbytes()]['balance'])
-            b = blk.get_balance(address)
-            bdiff = (bpre % BALANCE_MOD) - b
-            bpost = bpre + bdiff  # add the difference to the pre state
-
-            params2['post'][address.datahexbytes()] = {
-                "balance": encode_int_to_hex_with_prefix(bpost),
-                "code": encode_hex_with_prefix(blk.get_code(address)),
-                "nonce": encode_int_to_hex_with_prefix(blk.get_nonce(address)),
+            params2['post'][addr.datahexbytes()] = {
+                "balance": encode_int_to_hex_with_prefix(ceil_balance(blk.get_balance(addr))),
+                "code": encode_hex_with_prefix(blk.get_code(addr)),
+                "nonce": encode_int_to_hex_with_prefix(blk.get_nonce(addr)),
                 "storage": {}
             }
 
-            for storage in blk.get_storage_data(address):
+            for storage in blk.get_storage_data(addr):
                 k = encode_hex_with_prefix(storage['key'])
                 v = encode_hex_with_prefix(storage['value'])
 
-                params2['post'][address.datahexbytes()]['storage'][k] = v
+                params2['post'][addr.datahexbytes()]['storage'][k] = v
 
     if mode == FILL:
         return params2
@@ -293,12 +312,12 @@ def run_vm_test(state, params, mode, profiler=None):
         # zpad the storage keys to match CP always zpadding them
         if shouldbe:
             shouldbe2 = copy.deepcopy(shouldbe)
-            for address in shouldbe:
-                shouldbe2[address]['storage'] = {}
-                for k in shouldbe[address]['storage']:
+            for addr in shouldbe:
+                shouldbe2[addr]['storage'] = {}
+                for k in shouldbe[addr]['storage']:
                     paddedk = encode_hex_with_prefix(ethutils.zpad(decode_hex_with_prefix(k), 32))
-                    paddedv = encode_hex_with_prefix(ethutils.zpad(decode_hex_with_prefix(shouldbe[address]['storage'][k]), 32))
-                    shouldbe2[address]['storage'][paddedk] = paddedv
+                    paddedv = encode_hex_with_prefix(ethutils.zpad(decode_hex_with_prefix(shouldbe[addr]['storage'][k]), 32))
+                    shouldbe2[addr]['storage'][paddedk] = paddedv
             shouldbe = shouldbe2
 
         compare_post_states(shouldbe, reallyis)
@@ -324,8 +343,8 @@ def run_vm_test(state, params, mode, profiler=None):
         return time_post - time_pre
 
 
-def get_tests_from_file_or_dir(dname, json_only=False):
-    if os.path.isfile(dname):
+def get_tests_from_file_or_dir(dname, json_only=False, exclude=None):
+    if os.path.isfile(dname) and (not exclude or dname not in exclude):
         if dname[-5:] == '.json' or not json_only:
             with open(dname) as f:
                 return {dname: json.load(f)}
@@ -333,8 +352,8 @@ def get_tests_from_file_or_dir(dname, json_only=False):
             return {}
     else:
         o = {}
-        for f in os.listdir(dname):
-            fullpath = os.path.join(dname, f)
+        for f in glob.glob(dname):
+            fullpath = os.path.abspath(f)
             for k, v in list(get_tests_from_file_or_dir(fullpath, True).items()):
                 o[k] = v
         return o
@@ -358,32 +377,25 @@ def fixture_to_bytes(value):
         return value
 
 
-def generate_test_params(testsource, metafunc, skip_func=None, exclude_func=None):
+def generate_test_params(testsources, metafunc):
+    # assert we're not generating tests for incorrect test function
     for f in ['filename', 'testname', 'testdata']:
         if f not in metafunc.fixturenames:
             raise Exception("generate_test_params for %s with missing fixture %f" % (metafunc.function.__name__, f))
 
-    fixtures = get_tests_from_file_or_dir(os.path.join(fixture_path, testsource))
+    fixtures = {}
+    for testsource in testsources:
+        fixtures.update(get_tests_from_file_or_dir(os.path.join(fixture_path, testsource), exclude=fixtures.keys()))
 
-    base_dir = os.path.dirname(os.path.dirname(__file__))
+    base_dir = os.path.dirname(os.path.dirname(fixture_path))
     params = []
     for filename, tests in fixtures.items():
-        if isinstance(tests, dict):
-            filename = os.path.relpath(filename, base_dir)
-            for testname, testdata in tests.items():
-                if exclude_func and exclude_func(filename, testname, testdata):
-                    continue
-                if skip_func:
-                    skipif = pytest.mark.skipif(
-                        skip_func(filename, testname, testdata),
-                        reason="Excluded"
-                    )
-                    params.append(skipif((filename, testname, testdata)))
-                else:
-                    params.append((filename, testname, testdata))
+        assert isinstance(tests, dict)
+        filename = os.path.relpath(filename, base_dir)
 
-    metafunc.parametrize(
-        ('filename', 'testname', 'testdata'),
-        params
-    )
+        for testname, testdata in tests.items():
+            params.append((filename, testname, testdata))
+
+    metafunc.parametrize(('filename', 'testname', 'testdata'), params)
+
     return params

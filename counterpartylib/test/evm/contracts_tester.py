@@ -284,13 +284,13 @@ class state(object):
     def set_balance(self, address, value):
         util.credit(self.db, address.base58(), 'XCP', value, action='set_balance', event=None)
 
-    def mine(self, n=1, coinbase=None):
+    def mine(self, n=1, **kwargs):
         assert n > 0
 
         for x in range(0, n):
             block_index, block_hash, block_time = util_test.create_next_block(self.db)
 
-            block_obj = ethblocks.Block(self.db, block_hash)
+            block_obj = ethblocks.Block(self.db, block_hash, **kwargs)
             block_obj.log_listeners += self.log_listeners
 
             self.block = block_obj
