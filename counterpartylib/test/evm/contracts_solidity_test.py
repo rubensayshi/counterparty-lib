@@ -687,7 +687,7 @@ contract testme {
     assert o5 == 5
 
     # Mine 100 blocks
-    s.mine(100, tester.a3)
+    s.mine(100)
 
     # Expect code 4, meaning a normal execution where both get their share
     o6 = c2.main(address.Address.nulladdress(), 0)

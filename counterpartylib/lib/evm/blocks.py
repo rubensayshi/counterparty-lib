@@ -180,9 +180,7 @@ class Block(object):
 
         logger.getChild('set_storage_data').debug('[%s] %s: %s' % (contract_id.base58(), key, value))
 
-        if not value:
-            return None
-
+        is_empty = not value
         key = key.to_bytes(32, byteorder='big')
         value = value.to_bytes(32, byteorder='big')
 
@@ -197,15 +195,23 @@ class Block(object):
         cursor.execute('''SELECT * FROM storage WHERE contract_id = ? AND key = ?''', (bindings['contract_id'], key))
         storages = list(cursor)
         if storages:  # Update value.
-            logger.getChild('set_storage_data').debug('UPDATE %s' % bindings['contract_id'])
-            log.message(self.db, self.number, 'update', 'storage', bindings)
-            sql = '''UPDATE storage SET value = :value WHERE contract_id = :contract_id AND key = :key'''
-            cursor.execute(sql, bindings)
+            if is_empty:
+                logger.getChild('set_storage_data').debug('DELETE %s' % bindings['contract_id'])
+                sql = '''DELETE FROM storage WHERE contract_id = :contract_id AND key = :key'''
+                cursor.execute(sql, bindings)
+            else:
+                logger.getChild('set_storage_data').debug('UPDATE %s' % bindings['contract_id'])
+                sql = '''UPDATE storage SET value = :value WHERE contract_id = :contract_id AND key = :key'''
+                cursor.execute(sql, bindings)
         else:  # Insert value.
-            logger.getChild('set_storage_data').debug('INSERT %s' % bindings['contract_id'])
-            log.message(self.db, self.number, 'insert', 'storage', bindings)
-            sql = '''INSERT INTO storage VALUES (:contract_id, :key, :value)'''
-            cursor.execute(sql, bindings)
+            if is_empty:
+                logger.getChild('set_storage_data').debug('INSERT BLANK %s' % bindings['contract_id'])
+            else:
+                logger.getChild('set_storage_data').debug('INSERT %s' % bindings['contract_id'])
+                sql = '''INSERT INTO storage VALUES (:contract_id, :key, :value)'''
+                cursor.execute(sql, bindings)
+
+        log.message(self.db, self.number, 'insert', 'storage', bindings)
 
         cursor.close()
 

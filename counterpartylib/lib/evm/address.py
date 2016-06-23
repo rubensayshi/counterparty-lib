@@ -175,8 +175,11 @@ class Address(object):
             if addr >= MAXINT:
                 if CAST_ETHEREUM_ADDRESSES:
                     # strip off prefix bytes that aren't valid version bytes
-                    while addrb[0:1] not in valid_version_bytes():
+                    while len(addrb) and addrb[0:1] not in valid_version_bytes():
                         addrb = addrb[1:]
+
+                    if not len(addrb):
+                        return cls.normalize(addr % 2 ** 160)
 
                     # split the version byte off
                     version = addrb[0:1]

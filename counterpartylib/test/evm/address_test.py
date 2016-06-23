@@ -61,7 +61,6 @@ def test_max_int():
     a = Address(Address.normalizedata(b'\xff' * 20), version=config.ADDRESSVERSION)
     a.version = b'\xff'
 
-    print(a.bytes())
     assert a.int() == address.MAXINT
 
     # this is a ethereum literal from a test fixture
