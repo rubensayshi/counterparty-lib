@@ -15,6 +15,7 @@ import re
 import requests
 import collections
 import logging
+
 logger = logging.getLogger(__name__)
 from logging import handlers as logging_handlers
 D = decimal.Decimal
@@ -52,6 +53,8 @@ from counterpartylib.lib.messages import rps
 from counterpartylib.lib.messages import rpsresolve
 from counterpartylib.lib.messages import publish
 from counterpartylib.lib.messages import execute
+from counterpartylib.lib.messages.broadcasts.polls import initvote, castvote
+
 
 API_TABLES = ['assets', 'balances', 'credits', 'debits', 'bets', 'bet_matches',
               'broadcasts', 'btcpays', 'burns', 'cancels',
@@ -68,7 +71,7 @@ API_TRANSACTIONS = ['bet', 'broadcast', 'btcpay', 'burn', 'cancel',
 COMMONS_ARGS = ['encoding', 'fee_per_kb', 'regular_dust_size',
                 'multisig_dust_size', 'op_return_value', 'pubkey',
                 'allow_unconfirmed_inputs', 'fee', 'fee_provided',
-                'unspent_tx_hash','custom_inputs']
+                'unspent_tx_hash', 'custom_inputs', 'dust_return_pubkey', 'disable_utxo_locks']
 
 API_MAX_LOG_SIZE = 10 * 1024 * 1024 #max log size of 20 MB before rotation (make configurable later)
 API_MAX_LOG_COUNT = 10
@@ -268,7 +271,7 @@ def compose_transaction(db, name, params,
                         allow_unconfirmed_inputs=False,
                         fee=None,
                         fee_provided=0,
-                        unspent_tx_hash=None, custom_inputs=None, dust_return_pubkey=None):
+                        unspent_tx_hash=None, custom_inputs=None, dust_return_pubkey=None, disable_utxo_locks=False):
     """Create and return a transaction."""
 
     # Get provided pubkeys.
@@ -294,13 +297,6 @@ def compose_transaction(db, name, params,
         if not script.is_fully_valid(binascii.unhexlify(pubkey)):
             raise script.AddressError('invalid public key: {}'.format(pubkey))
 
-    # copy and remove dust_return_pubkey from params into var
-    if 'dust_return_pubkey' in params:
-        if dust_return_pubkey is not None:
-            raise exceptions.ComposeError('dust_return_pubkey in params and as argument')
-        dust_return_pubkey = params.get('dust_return_pubkey')
-        del params['dust_return_pubkey']
-
     compose_method = sys.modules['counterpartylib.lib.messages.{}'.format(name)].compose
     compose_params = inspect.getargspec(compose_method)[0]
     missing_params = [p for p in compose_params if p not in params and p != 'db']
@@ -318,7 +314,8 @@ def compose_transaction(db, name, params,
                                         exact_fee=fee,
                                         fee_provided=fee_provided,
                                         unspent_tx_hash=unspent_tx_hash, custom_inputs=custom_inputs,
-                                        dust_return_pubkey=dust_return_pubkey)
+                                        dust_return_pubkey=dust_return_pubkey,
+                                        disable_utxo_locks=disable_utxo_locks)
 
 def conditional_decorator(decorator, condition):
     """Checks the condition and if True applies specified decorator."""
@@ -383,6 +380,21 @@ class APIStatusPoller(threading.Thread):
                 current_api_status_response_json = None
             time.sleep(config.BACKEND_POLL_INTERVAL)
 
+
+def split_params(**kwargs):
+    transaction_args = {}
+    common_args = {}
+    private_key_wif = None
+    for key in kwargs:
+        if key in COMMONS_ARGS:
+            common_args[key] = kwargs[key]
+        elif key == 'privkey':
+            private_key_wif = kwargs[key]
+        else:
+            transaction_args[key] = kwargs[key]
+    return transaction_args, common_args, private_key_wif
+
+
 class APIServer(threading.Thread):
     """Handle JSON-RPC API calls."""
     def __init__(self):
@@ -435,20 +447,6 @@ class APIServer(threading.Thread):
 
         # Generate dynamically create_{transaction} methods
         def generate_create_method(tx):
-
-            def split_params(**kwargs):
-                transaction_args = {}
-                common_args = {}
-                private_key_wif = None
-                for key in kwargs:
-                    if key in COMMONS_ARGS:
-                        common_args[key] = kwargs[key]
-                    elif key == 'privkey':
-                        private_key_wif = kwargs[key]
-                    else:
-                        transaction_args[key] = kwargs[key]
-                return transaction_args, common_args, private_key_wif
-
             def create_method(**kwargs):
                 try:
                     transaction_args, common_args, private_key_wif = split_params(**kwargs)
@@ -505,6 +503,114 @@ class APIServer(threading.Thread):
                 return util.xcp_supply(db)
             else:
                 return util.asset_supply(db, asset)
+
+        @dispatcher.add_method
+        def list_polls(asset=None, active=True, votename_match=None, pretty=False):
+            cursor = db.cursor()
+            sql = 'SELECT * FROM polls'
+            where = []
+            args = []
+            if asset is not None:
+                where.append('asset = ?')
+                args.append(asset)
+            if active is True:
+                where.append('status = "open"')
+            if votename_match is not None:
+                where.append('votename LIKE ?')
+                args.append('%' + votename_match + '%')
+
+            if len(where) > 0:
+                sql += ' WHERE ' + " AND ".join(where)
+
+            cursor.execute(sql, args)
+            polls = cursor.fetchall()
+
+            result = []
+            if len(polls) > 0:
+                cursor.execute('SELECT * FROM poll_votes WHERE votename IN(' + ",".join("?" * len(polls)) + ')', [poll['votename'] for poll in polls])
+                votes = cursor.fetchall()
+
+                votesbypoll = {}
+                for vote in votes:
+                    votesbypoll.setdefault(vote['votename'], [])
+                    votesbypoll[vote['votename']].append(vote)
+
+                for poll in polls:
+                    holders = util.holders(db, poll['asset'], poll['block_index'])
+                    options = json.loads(poll['options'])
+                    votes = votesbypoll.get(poll['votename'], [])
+
+                    poll['holders'] = holders
+                    poll['options'] = options
+                    poll['votes'] = votes
+
+                    holdersbyaddr = {}
+                    for holder in holders:
+                        holdersbyaddr.setdefault(holder['address'], 0)
+                        holdersbyaddr[holder['address']] += holder['address_quantity']
+
+                    counts = {}
+                    for vote in votes:
+                        vote['stake'] = holdersbyaddr[vote['source']]
+                        vote['weighted_vote'] = (vote['vote'] / 100) * holdersbyaddr[vote['source']]
+
+                        counts.setdefault(vote['option'], 0)
+                        counts[vote['option']] += vote['weighted_vote']
+
+                    poll['results'] = sorted([{'option': option, 'weighted_vote': weighted_vote} for option, weighted_vote in counts.items()], key=lambda r: r['weighted_vote'])
+
+                    result.append(poll)
+
+            cursor.close()
+
+            return result
+
+        @dispatcher.add_method
+        def create_poll(votename, asset, options, deadline=None, duration=None, **kwargs):
+            options = [option.strip() for option in options.split(",")]
+            assert deadline or duration, "need deadline or duration"
+            assert not (deadline and duration), "can't have deadline and duration"
+
+            if duration:
+                deadline = util.CURRENT_BLOCK_INDEX + int(duration)
+
+            source, problems, text = initvote.compose(db, kwargs['source'], votename, asset, deadline, options)
+
+            transaction_args, common_args, private_key_wif = split_params(**kwargs)
+            transaction_args['text'] = text
+            transaction_args['value'] = broadcast.BROADCAST_NO_BETS
+            transaction_args['fee_fraction'] = 0
+
+            transaction_args.setdefault('timestamp', int(time.time()))
+
+            try:
+                return compose_transaction(db, name='broadcast', params=transaction_args, **common_args)
+            except TypeError as e:
+                raise APIError(str(e))
+            except (script.AddressError, exceptions.ComposeError, exceptions.TransactionError, exceptions.BalanceError) as error:
+                error_msg = "Error composing {} transaction via API: {}".format(tx, str(error))
+                logging.warning(error_msg)
+                raise JSONRPCDispatchException(code=JSON_RPC_ERROR_API_COMPOSE, message=error_msg)
+
+        @dispatcher.add_method
+        def create_vote(votename, option, vote, **kwargs):
+            source, problems, text = castvote.compose(db, kwargs['source'], votename, option, vote)
+
+            transaction_args, common_args, private_key_wif = split_params(**kwargs)
+            transaction_args['text'] = text
+            transaction_args['value'] = broadcast.BROADCAST_NO_BETS
+            transaction_args['fee_fraction'] = 0
+
+            transaction_args.setdefault('timestamp', int(time.time()))
+
+            try:
+                return compose_transaction(db, name='broadcast', params=transaction_args, **common_args)
+            except TypeError as e:
+                raise APIError(str(e))
+            except (script.AddressError, exceptions.ComposeError, exceptions.TransactionError, exceptions.BalanceError) as error:
+                error_msg = "Error composing {} transaction via API: {}".format(tx, str(error))
+                logging.warning(error_msg)
+                raise JSONRPCDispatchException(code=JSON_RPC_ERROR_API_COMPOSE, message=error_msg)
 
         @dispatcher.add_method
         def get_xcp_supply():

@@ -94,9 +94,10 @@ def initialise_config(database_file=None, log_file=None, api_log_file=None,
                 check_asset_conservation=config.DEFAULT_CHECK_ASSET_CONSERVATION,
                 backend_ssl_verify=None, rpc_allow_cors=None, p2sh_dust_return_pubkey=None,
                 utxo_locks_max_addresses=config.DEFAULT_UTXO_LOCKS_MAX_ADDRESSES,
-                utxo_locks_max_age=config.DEFAULT_UTXO_LOCKS_MAX_AGE):
+                utxo_locks_max_age=config.DEFAULT_UTXO_LOCKS_MAX_AGE,
+                broadcast_parse_polls=True):
 
-     # Data directory
+    # Data directory
     data_dir = appdirs.user_data_dir(appauthor=config.XCP_NAME, appname=config.APP_NAME, roaming=True)
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir, mode=0o755)
@@ -132,22 +133,28 @@ def initialise_config(database_file=None, log_file=None, api_log_file=None,
         os.makedirs(log_dir, mode=0o755)
 
     # Log
-    if log_file:
-        config.LOG = log_file
-    else:
+    if log_file is False:  # no file logging
+        config.LOG = None
+    elif not log_file:  # default location
         filename = 'server{}.log'.format(network)
         config.LOG = os.path.join(log_dir, filename)
+    else:  # user-specified location
+        config.LOG = log_file
 
     # Set up logging.
     log.set_up(log.ROOT_LOGGER, verbose=verbose, logfile=config.LOG, console_logfilter=console_logfilter)
-    logger.debug('Writing server log to file: `{}`'.format(config.LOG))
+    if config.LOG:
+        logger.debug('Writing server log to file: `{}`'.format(config.LOG))
 
-    if api_log_file:
-        config.API_LOG = api_log_file
-    else:
+    if api_log_file is False:  # no file logging
+        config.API_LOG = None
+    elif not api_log_file:  # default location
         filename = 'server{}.access.log'.format(network)
         config.API_LOG = os.path.join(log_dir, filename)
-    logger.debug('Writing API accesses log to file: `{}`'.format(config.API_LOG))
+    else:  # user-specified location
+        config.API_LOG = api_log_file
+    if config.API_LOG:
+        logger.debug('Writing API accesses log to file: `{}`'.format(config.API_LOG))
 
     # Log unhandled errors.
     def handle_exception(exc_type, exc_value, exc_traceback):
@@ -352,6 +359,9 @@ def initialise_config(database_file=None, log_file=None, api_log_file=None,
     config.UTXO_LOCKS_MAX_ADDRESSES = utxo_locks_max_addresses
     config.UTXO_LOCKS_MAX_AGE = utxo_locks_max_age
     transaction.UTXO_LOCKS = None  # reset the UTXO_LOCKS (for tests really)
+
+    if broadcast_parse_polls:
+        config.BROADCAST_PARSE_POLLS = broadcast_parse_polls
 
     logger.info('Running v{} of counterparty-lib.'.format(config.VERSION_STRING))
 

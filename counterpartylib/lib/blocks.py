@@ -32,6 +32,7 @@ from counterpartylib.lib import backend
 from counterpartylib.lib import log
 from counterpartylib.lib import database
 from .messages import (send, order, btcpay, issuance, broadcast, bet, dividend, burn, cancel, rps, rpsresolve, publish, execute, destroy)
+from .messages.broadcasts import polls
 
 from .kickstart.blocks_parser import BlockchainParser, ChainstateParser
 from .kickstart.utils import ib2h
@@ -42,7 +43,7 @@ from .exceptions import DecodeError, BTCOnlyError
 TABLES = ['credits', 'debits', 'messages'] + \
          ['bet_match_resolutions', 'order_match_expirations', 'order_matches',
          'order_expirations', 'orders', 'bet_match_expirations', 'bet_matches',
-         'bet_expirations', 'bets', 'broadcasts', 'btcpays', 'burns',
+         'bet_expirations', 'bets', 'broadcasts', 'polls', 'poll_votes', 'btcpays', 'burns',
          'cancels', 'dividends', 'issuances', 'sends',
          'rps_match_expirations', 'rps_expirations', 'rpsresolves',
          'rps_matches', 'rps', 'executions', 'storage', 'suicides', 'nonces',
@@ -171,6 +172,7 @@ def parse_block(db, block_index, block_time,
     order.expire(db, block_index)
     bet.expire(db, block_index, block_time)
     rps.expire(db, block_index)
+    polls.update_status(db, block_index, block_time)
 
     # Parse transactions, sorting them by type.
     cursor = db.cursor()
@@ -346,6 +348,7 @@ def initialise(db):
     btcpay.initialise(db)
     issuance.initialise(db)
     broadcast.initialise(db)
+    polls.initialise(db)
     bet.initialise(db)
     publish.initialise(db)
     execute.initialise(db)
@@ -699,9 +702,12 @@ def get_tx_info2(tx_hex, block_parser=None, p2sh_support=False):
         else:
             raise DecodeError('unrecognised source type')
 
-        # Collect unique sources.
-        if new_source not in sources:
-            sources.append(new_source)
+        # old; append to sources, results in invalid addresses
+        # new; first found source is source, the rest can be anything (to fund the TX for example)
+        if not (util.enabled('first_input_is_source') and len(sources)):
+            # Collect unique sources.
+            if new_source not in sources:
+                sources.append(new_source)
 
     sources = '-'.join(sources)
     destinations = '-'.join(destinations)

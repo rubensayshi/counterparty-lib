@@ -32,6 +32,8 @@ from counterpartylib.test.fixtures.scenarios import UNITTEST_FIXTURE, INTEGRATIO
 
 D = decimal.Decimal
 
+GENESIS_TIMESTAMP = 1388700000
+
 # Set test environment
 os.environ['TZ'] = 'EST'
 time.tzset()
@@ -123,7 +125,7 @@ def insert_block(db, block_index, parse_block=True):
     """Add blocks to the blockchain."""
     cursor = db.cursor()
     block_hash = util.dhash_string(chr(block_index))
-    block_time = block_index * 1000
+    block_time = mock_block_time(block_index)
     block = (block_index, block_hash, block_time, None, None, None, None)
     cursor.execute('''INSERT INTO blocks (block_index, block_hash, block_time, ledger_hash, txlist_hash, previous_block_hash, difficulty) 
                       VALUES (?,?,?,?,?,?,?)''', block)
@@ -133,6 +135,9 @@ def insert_block(db, block_index, parse_block=True):
     if parse_block:
         blocks.parse_block(db, block_index, block_time)
     return block_index, block_hash, block_time
+
+def mock_block_time(block_index):
+    return GENESIS_TIMESTAMP + (block_index * 100)
 
 def create_next_block(db, block_index=None, parse_block=True):
     """Create faux data for the next block."""
@@ -317,12 +322,14 @@ def check_record(record, server_db):
         sql += " AND ".join(conditions)
 
         count = list(cursor.execute(sql, tuple(bindings)))[0]['c']
-        if count != 1:
+
+        if (record.get('not', False) and count != 0) or (not record.get('not', False) and count != 1):
             if pytest.config.option.verbosediff:
                 pprint.PrettyPrinter(indent=4).pprint(record['values'])
                 pprint.PrettyPrinter(indent=4).pprint(list(cursor.execute('''SELECT * FROM {} WHERE block_index = ?'''.format(record['table']), (record['values']['block_index'],))))
 
             raise AssertionError("check_record \n" +
+                                 "not=" + record.get('not', None) + " \n" +
                                  "table=" + record['table'] + " \n" +
                                  "condiitions=" + ",".join(conditions) + " \n" +
                                  "bindings=" + ",".join(map(lambda v: str(v), bindings)))
@@ -340,15 +347,18 @@ def vector_to_args(vector, functions=[]):
                 mock_protocol_changes = params.get('mock_protocol_changes', None)
                 if functions == [] or (tx_name + '.' + method) in functions:
                     args.append((tx_name, method, params['in'], outputs, error, records, comment, mock_protocol_changes))
+
     return args
 
 def exec_tested_method(tx_name, method, tested_method, inputs, server_db):
     """Execute tested_method within context and arguments."""
     if tx_name == 'transaction' and method == 'construct':
         return tested_method(server_db, inputs[0], **inputs[1])
-    elif (tx_name == 'util' and (method == 'api' or method == 'date_passed' or method == 'price' or method == 'generate_asset_id' \
-        or method == 'generate_asset_name' or method == 'dhash_string' or method == 'enabled' or method == 'get_url' or method == 'hexlify')) or tx_name == 'script' \
-        or (tx_name == 'blocks' and (method[:len('get_tx_info')] == 'get_tx_info')) or tx_name == 'transaction' or method == 'sortkeypicker'\
+    elif (tx_name == 'util' and (method == 'api' or method == 'date_passed' or method == 'price' or method == 'generate_asset_id'
+          or method == 'generate_asset_name' or method == 'dhash_string' or method == 'enabled' or method == 'get_url' or method == 'hexlify')) \
+        or tx_name == 'script' \
+        or (tx_name == 'blocks' and (method[:len('get_tx_info')] == 'get_tx_info')) or tx_name == 'transaction' or method == 'sortkeypicker' \
+        or method == 'str_is_bool' or method == 'str_to_bool' or method == 'bool_to_str' \
         or tx_name == 'backend':
         return tested_method(*inputs)
     else:
@@ -396,11 +406,18 @@ def check_outputs(tx_name, method, inputs, outputs, error, records, comment, moc
             else:
                 msg = "expected outputs don't match test_outputs: outputs=%s test_outputs=%s" % (outputs, test_outputs)
             raise Exception(msg)
+
     if error is not None:
         assert str(exception.value) == error[1]
+
     if records is not None:
-        for record in records:
-            check_record(record, server_db)
+        try:
+            for record in records:
+                check_record(record, server_db)
+        except AssertionError as e:
+            if pytest.config.option.verbosediff:
+                print("test_outputs=\n" + pprint.pformat(test_outputs))
+            raise e
 
 def compare_strings(string1, string2):
     """Compare strings diff-style."""

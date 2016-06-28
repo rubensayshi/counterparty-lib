@@ -32,12 +32,17 @@ from counterpartylib.lib import exceptions
 from counterpartylib.lib import config
 from counterpartylib.lib import util
 from counterpartylib.lib import log
+from counterpartylib.lib.messages.broadcasts import polls
 from . import (bet)
 
 FORMAT = '>IdI'
 LENGTH = 4 + 8 + 4
 ID = 30
 # NOTE: Pascal strings are used for storing texts for backwards‐compatibility.
+
+BROADCAST_NO_BETS = -1
+BROADCAST_BET_CANCEL = -2
+BROADCAST_BET_CANCEL_MATCHES = -3
 
 def initialise(db):
     cursor = db.cursor()
@@ -171,17 +176,20 @@ def parse (db, tx, message):
     if util.enabled('broadcast_invalid_check') and status != 'valid':
         return
 
+    if config.BROADCAST_PARSE_POLLS:
+        polls.parse(db, tx, text, util.CURRENT_BLOCK_INDEX)
+
     # Negative values (default to ignore).
     if value is None or value < 0:
         # Cancel Open Bets?
-        if value == -2:
+        if value == BROADCAST_BET_CANCEL:
             cursor.execute('''SELECT * FROM bets \
                               WHERE (status = ? AND feed_address = ?)''',
                            ('open', tx['source']))
             for i in list(cursor):
                 bet.cancel_bet(db, i, 'dropped', tx['block_index'])
         # Cancel Pending Bet Matches?
-        if value == -3:
+        if value == BROADCAST_BET_CANCEL_MATCHES:
             cursor.execute('''SELECT * FROM bet_matches \
                               WHERE (status = ? AND feed_address = ?)''',
                            ('pending', tx['source']))

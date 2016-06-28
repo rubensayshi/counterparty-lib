@@ -45,8 +45,9 @@ def exectracer(cursor, sql, bindings):
     skip_tables = [
         'blocks', 'transactions',
         'balances', 'messages', 'mempool', 'assets', 
-        'suicides', 'postqueue', # These tables are ephemeral.
-        'nonces', 'storage' # List message manually.
+        'suicides', 'postqueue',  # These tables are ephemeral.
+        'nonces', 'storage',  # List message manually.
+        'polls', 'poll_votes',  # not part of consensus
     ]
     skip_tables_block_messages = copy.copy(skip_tables)
     if command == 'update':
