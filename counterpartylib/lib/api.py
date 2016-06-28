@@ -268,7 +268,8 @@ def compose_transaction(db, name, params,
                         allow_unconfirmed_inputs=False,
                         fee=None,
                         fee_provided=0,
-                        unspent_tx_hash=None, custom_inputs=None, dust_return_pubkey=None, disable_utxo_locks=False):
+                        unspent_tx_hash=None, custom_inputs=None, dust_return_pubkey=None, disable_utxo_locks=False,
+                        p2sh_pretx_txid=None):
     """Create and return a transaction."""
 
     # Get provided pubkeys.
@@ -312,7 +313,8 @@ def compose_transaction(db, name, params,
                                         fee_provided=fee_provided,
                                         unspent_tx_hash=unspent_tx_hash, custom_inputs=custom_inputs,
                                         dust_return_pubkey=dust_return_pubkey,
-                                        disable_utxo_locks=disable_utxo_locks)
+                                        disable_utxo_locks=disable_utxo_locks,
+                                        p2sh_pretx_txid=p2sh_pretx_txid)
 
 def conditional_decorator(decorator, condition):
     """Checks the condition and if True applies specified decorator."""

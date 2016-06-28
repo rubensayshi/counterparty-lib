@@ -19,6 +19,7 @@ import apsw
 import pytest
 import binascii
 import appdirs
+import pprint
 import pycoin
 from pycoin.tx import Tx
 import bitcoin as bitcoinlib
@@ -28,7 +29,7 @@ CURR_DIR = os.path.dirname(os.path.realpath(os.path.join(os.getcwd(), os.path.ex
 sys.path.append(os.path.normpath(os.path.join(CURR_DIR, '..')))
 
 from counterpartylib import server
-from counterpartylib.lib import (config, util, blocks, check, backend, database, transaction)
+from counterpartylib.lib import (config, util, blocks, check, backend, database, transaction, exceptions)
 
 from counterpartylib.test.fixtures.params import DEFAULT_PARAMS as DP
 from counterpartylib.test.fixtures.scenarios import UNITTEST_FIXTURE, INTEGRATION_SCENARIOS, standard_scenarios_params
@@ -171,19 +172,23 @@ def insert_raw_transaction(raw_transaction, db):
     block_index, block_hash, block_time = create_next_block(db, parse_block=False)
 
     tx_hash = dummy_tx_hash(raw_transaction)
+    tx = None
     tx_index = block_index - config.BURN_START + 1
+    try:
+        source, destination, btc_amount, fee, data = blocks._get_tx_info(raw_transaction)
+        transaction = (tx_index, tx_hash, block_index, block_hash, block_time, source, destination, btc_amount, fee, data, True)
+        cursor.execute('''INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?,?)''', transaction)
+        tx = list(cursor.execute('''SELECT * FROM transactions WHERE tx_index = ?''', (tx_index,)))[0]
+    except exceptions.BTCOnlyError:
+        pass
 
-    source, destination, btc_amount, fee, data = blocks._get_tx_info(raw_transaction)
-    transaction = (tx_index, tx_hash, block_index, block_hash, block_time, source, destination, btc_amount, fee, data, True)
-    cursor.execute('''INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?,?)''', transaction)
-    tx = list(cursor.execute('''SELECT * FROM transactions WHERE tx_index = ?''', (tx_index,)))[0]
     cursor.close()
 
     MOCK_UTXO_SET.add_raw_transaction(raw_transaction, tx_id=tx_hash, confirmations=1)
 
     util.CURRENT_BLOCK_INDEX = block_index
     blocks.parse_block(db, block_index, block_time)
-    return tx
+    return tx_hash, tx
 
 
 def insert_unconfirmed_raw_transaction(raw_transaction, db):
@@ -278,29 +283,34 @@ def prefill_rawtransactions_db(db):
     with open(CURR_DIR + '/fixtures/unspent_outputs.json', 'r') as listunspent_test_file:
             wallet_unspent = json.load(listunspent_test_file)
             for output in wallet_unspent:
-                txid = binascii.hexlify(bitcoinlib.core.lx(output['txid'])).decode()
-                tx = backend.deserialize(output['txhex'])
+                txid = output['txid']
                 cursor.execute('INSERT INTO raw_transactions VALUES (?, ?)', (txid, output['txhex']))
     cursor.close()
 
 
-def save_rawtransaction(db, tx_hash, tx_hex):
+def save_rawtransaction(db, txid, tx_hex):
     """Insert the raw transaction into the db."""
+    if isinstance(txid, bytes):
+        txid = binascii.hexlify(txid).decode('ascii')
+
     cursor = db.cursor()
     try:
-        txid = binascii.hexlify(bitcoinlib.core.lx(tx_hash)).decode()
         cursor.execute('''INSERT INTO raw_transactions VALUES (?, ?)''', (txid, tx_hex))
     except Exception as e: # TODO
         pass
     cursor.close()
 
+
 def getrawtransaction(db, txid):
     """Return raw transactions with specific hash."""
+    if isinstance(txid, bytes):
+        txid = binascii.hexlify(txid).decode('ascii')
+
     cursor = db.cursor()
-    txid = binascii.hexlify(txid).decode()
     tx_hex = list(cursor.execute('''SELECT tx_hex FROM raw_transactions WHERE tx_hash = ?''', (txid,)))[0][0]
     cursor.close()
     return tx_hex
+
 
 def initialise_db(db):
     """Initialise blockchain in the db and insert first block."""
@@ -436,7 +446,7 @@ def exec_tested_method(tx_name, method, tested_method, inputs, server_db):
         return tested_method(server_db, inputs[0], **inputs[1])
     elif (tx_name == 'util' and (method == 'api' or method == 'date_passed' or method == 'price' or method == 'generate_asset_id' \
         or method == 'generate_asset_name' or method == 'dhash_string' or method == 'enabled' or method == 'get_url' or method == 'hexlify')) or tx_name == 'script' \
-        or (tx_name == 'blocks' and (method[:len('get_tx_info')] == 'get_tx_info')) or tx_name == 'transaction' or method == 'sortkeypicker'\
+        or (tx_name == 'blocks' and (method[:len('get_tx_info')] == 'get_tx_info')) or tx_name == 'transaction' or tx_name == 'transaction_helper.serializer' or method == 'sortkeypicker'\
         or tx_name == 'backend':
         return tested_method(*inputs)
     else:
@@ -592,3 +602,20 @@ def reparse(testnet=True):
                 old_txlist = get_block_txlist(prod_db, block['block_index'])
                 compare_strings(old_txlist, new_txlist)
             raise(e)
+
+
+class ConfigContext(object):
+    def __init__(self, **kwargs):
+        self.config = config
+        self._extend = kwargs
+        self._before = {}
+
+    def __enter__(self):
+        self._before = {}
+        for k in self._extend:
+            self._before[k] = vars(self.config)[k]
+            vars(self.config)[k] = self._extend[k]
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for k in self._before:
+            vars(self.config)[k] = self._before[k]
