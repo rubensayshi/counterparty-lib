@@ -14,6 +14,7 @@ import socket
 import signal
 import appdirs
 import platform
+import bitcoin as bitcoinlib
 from urllib.parse import quote_plus as urlencode
 
 from counterpartylib.lib import log
@@ -113,6 +114,8 @@ def initialise_config(database_file=None, log_file=None, api_log_file=None,
         config.TESTCOIN = testcoin
     else:
         config.TESTCOIN = False
+
+    bitcoinlib.SelectParams('testnet' if config.TESTNET else 'bitcoin')
 
     network = ''
     if config.TESTNET:
