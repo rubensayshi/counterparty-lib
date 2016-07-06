@@ -192,6 +192,10 @@ class MockUTXOSet(object):
             })
 
     def increment_confirmations(self):
+        cursor = self.rawtransactions_db.cursor()
+        cursor.execute('''UPDATE raw_transactions SET confirmations = confirmations + 1''')
+        cursor.close()
+
         for utxo in self.txouts:
             utxo['confirmations'] = (utxo['confirmations'] or 0) + 1
 
@@ -222,7 +226,7 @@ class MockUTXOSet(object):
         # logger.debug(pprint.pformat(txins))
         # logger.debug(pprint.pformat(txouts))
 
-        util_test.save_rawtransaction(self.rawtransactions_db, tx_id, raw_transaction)
+        util_test.save_rawtransaction(self.rawtransactions_db, tx_id, raw_transaction, confirmations)
 
         self.update_utxo_set(txins, txouts)
 
@@ -296,8 +300,14 @@ def init_mock_functions(request, monkeypatch, mock_utxos, rawtransactions_db):
         address = '_'.join([str(signatures_required)] + sorted(pubkeys) + [str(len(pubkeys))])
         return address
 
-    def get_cached_raw_transaction(tx_hash, verbose=False):
-        return util_test.getrawtransaction(rawtransactions_db, bitcoinlib.core.lx(tx_hash))
+    def mocked_getrawtransaction(tx_hash, verbose=False):
+        return util_test.getrawtransaction(rawtransactions_db, bitcoinlib.core.lx(tx_hash), verbose=verbose)
+
+    def mocked_getrawtransaction_batch(txhash_list, verbose=False, skip_missing=False):
+        return util_test.getrawtransaction_batch(rawtransactions_db, txhash_list, verbose=verbose)
+
+    def mocked_searchrawtransactions(address, unconfirmed=False):
+        return util_test.searchrawtransactions(rawtransactions_db, address, unconfirmed)
 
     # mock the arc4 with a fixed seed to keep data from changing based on inputs
     _init_arc4 = arc4.init_arc4
@@ -315,6 +325,8 @@ def init_mock_functions(request, monkeypatch, mock_utxos, rawtransactions_db):
     monkeypatch.setattr('counterpartylib.lib.api.init_api_access_log', init_api_access_log)
     if hasattr(config, 'PREFIX'):
         monkeypatch.setattr('counterpartylib.lib.config.PREFIX', b'TESTXXXX')
-    monkeypatch.setattr('counterpartylib.lib.backend.getrawtransaction', get_cached_raw_transaction)
+    monkeypatch.setattr('counterpartylib.lib.backend.getrawtransaction', mocked_getrawtransaction)
+    monkeypatch.setattr('counterpartylib.lib.backend.getrawtransaction_batch', mocked_getrawtransaction_batch)
+    monkeypatch.setattr('counterpartylib.lib.backend.searchrawtransactions', mocked_searchrawtransactions)
     monkeypatch.setattr('counterpartylib.lib.backend.pubkeyhash_to_pubkey', pubkeyhash_to_pubkey)
     monkeypatch.setattr('counterpartylib.lib.backend.multisig_pubkeyhashes_to_pubkeys', multisig_pubkeyhashes_to_pubkeys)
