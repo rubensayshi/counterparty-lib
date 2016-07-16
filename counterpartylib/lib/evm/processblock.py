@@ -131,8 +131,8 @@ def apply_transaction(db, block, tx):
     message_gas = tx.startgas - intrinsic_gas
     message_data = vm.CallData([ethutils.safe_ord(x) for x in tx.data], 0, len(tx.data))
 
-    message = vm.Message(Address.normalize(tx.sender), Address.normalize(tx.to),
-                         tx.value, message_gas, message_data, code_address=Address.normalize(tx.to))
+    message = vm.Message(sender=Address.normalize(tx.sender), to=Address.normalize(tx.to),
+                         value=tx.value, asset=tx.asset, assetvalue=tx.assetvalue, gas=message_gas, data=message_data, code_address=Address.normalize(tx.to))
 
     # MESSAGE
     ext = VMExt(db, block, tx)
@@ -264,11 +264,20 @@ def _apply_msg(db, tx, ext, msg, code):
     with ext._block.snapshot_context() as snapshot:
         if msg.transfers_value:
             # Transfer value, instaquit if not enough
-            log_msg.debug('TRANSFER %s -> %s: %d' % (msg.sender, msg.to, msg.value))
-            if not ext._block.transfer_value(msg.sender, msg.to, msg.value, tx=tx, action='transfer value'):
-                log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
-                snapshot.release()
-                return 1, msg.gas, []  # @TODO: failure returns 1?
+            if msg.value:
+                log_msg.debug('TRANSFER %s -> %s: %d' % (msg.sender, msg.to, msg.value))
+                if not ext._block.transfer_value(msg.sender, msg.to, msg.value, tx=tx, action='transfer value'):
+                    log_msg.debug('MSG TRANSFER FAILED', have=ext.get_balance(msg.to), want=msg.value)
+                    snapshot.release()
+                    return 1, msg.gas, []  # @TODO: failure returns 1?
+
+            # Transfer asset value, instaquit if not enough
+            if msg.asset and msg.assetvalue:
+                log_msg.debug('TRANSFER ASSET %s -> %s: %d %s' % (msg.sender, msg.to, msg.assetvalue, msg.asset))
+                if not ext._block.transfer_value(msg.sender, msg.to, msg.assetvalue, asset=msg.asset, tx=tx, action='transfer value'):
+                    log_msg.debug('MSG TRANSFER ASSET FAILED', have=ext.get_balance(msg.to, asset=msg.asset), want=msg.assetvalue)
+                    snapshot.release()
+                    return 1, msg.gas, []  # @TODO: failure returns 1?
 
         # Main loop
         if msg.code_address and msg.code_address.data in specials.specials:

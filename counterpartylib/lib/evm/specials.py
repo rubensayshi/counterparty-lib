@@ -96,7 +96,7 @@ def proc_sendasset(ext, msg):
     
     logger.warn('proc_sendasset %s -> %s %s [%s]' % (msg.sender, address, value, repr(asset)))
 
-    r = ext._block.transfer_value(msg.sender, address, value, asset=asset, tx=ext._tx, action='proc_sendasset')
+    r = ext._block.transfer_value(msg.sender, address, 0, asset=asset, assetvalue=value, tx=ext._tx, action='proc_sendasset')
     # try:
     #     r = ext._block.transfer_value(msg.sender, address, value, asset=asset, tx=ext._tx)
     # except util.DebitError as e:
@@ -112,9 +112,12 @@ def proc_sendasset(ext, msg):
 def proc_receivedasset(ext, msg):
     gas_cost = opcodes.GRIPEMD160BASE
 
-    o = ethutils.zpad(ethutils.encode_int(1), 32) + ethutils.zpadright(b'XCP', 32)
+    logger.warn('proc_receivedasset %d %s' % (msg.assetvalue, msg.asset))
+
+    o = ethutils.zpad(ethutils.encode_int(msg.assetvalue), 32) + ethutils.zpadright(msg.asset, 32)
 
     return 1, msg.gas - gas_cost, o
+
 
 CNTRPRTY = 0x434e545250525459000000000000000000000000
 
@@ -129,6 +132,8 @@ specials = {
         ethutils.encode_int_to_hexstr(CNTRPRTY + 0x02): proc_receivedasset,
     }.items()
 }
+
+specials_reverse = dict((v.__name__, k) for k, v in specials.items())
 
 if __name__ == '__main__':
     class msg(object):

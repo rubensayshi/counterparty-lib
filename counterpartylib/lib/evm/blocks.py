@@ -328,10 +328,20 @@ class Block(object):
         destination = Address.normalize(destination)
 
         assert tx is not None
+
         if source:
-            util.debit(self.db, source.base58(), asset, quantity, action=action, event=tx.tx_hash)
+            try:
+                util.debit(self.db, source.base58(), asset, quantity, action=action, event=tx.tx_hash)
+            except util.CreditError:
+            # except util.DebitError:
+                return False
+
         if destination:
-            util.credit(self.db, destination.base58(), asset, quantity, action=action, event=tx.tx_hash)
+            try:
+                util.credit(self.db, destination.base58(), asset, quantity, action=action, event=tx.tx_hash)
+            except util.CreditError:
+                return False
+
         return True
 
     def del_account(self, contract_id):

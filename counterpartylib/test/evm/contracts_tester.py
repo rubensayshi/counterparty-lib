@@ -115,13 +115,17 @@ class ABIContract(object):
         def kall_factory(f):
 
             def kall(*args, **kwargs):
+                logger.debug('kall %s' % kwargs)
+
                 _state.log_listeners.append(lambda x: logger.warn(self._translator.listen(x)))
-                o = _state._send(kwargs.get('sender', DEFAULT_SENDER),
-                                 self.address,
-                                 kwargs.get('value', 0),
-                                 self._translator.encode_function_call(f, args),
+                o = _state._send(sender=kwargs.get('sender', DEFAULT_SENDER),
+                                 to=self.address,
+                                 value=kwargs.get('value', 0),
+                                 asset=kwargs.get('asset', None),
+                                 assetvalue=kwargs.get('assetvalue', None),
+                                 evmdata=self._translator.encode_function_call(f, args),
                                  startgas=kwargs.get('startgas', DEFAULT_STARTGAS),
-                                 **dict_without(kwargs, 'startgas', 'sender', 'value', 'output'))
+                                 **dict_without(kwargs, 'startgas', 'sender', 'value', 'output', 'asset', 'assetvalue'))
                 _state.log_listeners.pop()
                 # Compute output data
                 if kwargs.get('output', '') == 'raw':
@@ -199,7 +203,7 @@ class state(object):
 
     def evm(self, evm, sender=None, endowment=0, startgas=DEFAULT_STARTGAS):
         sender = sender if sender is not None else DEFAULT_SENDER
-        tx, success, output = self.do_send(sender, '', endowment, evm, startgas=startgas)
+        tx, success, output = self.do_send(sender, '', value=endowment, asset=None, assetvalue=None, data=evm, startgas=startgas)
         if not success:
             raise ContractCreationFailed()
 
@@ -210,7 +214,7 @@ class state(object):
                         "or send(sender, to, value, data) directly, "
                         "using the abi module to generate data if needed")
 
-    def mock_tx(self, sender, to, value, data, startgas=DEFAULT_STARTGAS, gasprice=1, nonce=None, block_obj=None):
+    def mock_tx(self, sender, to, value, data, asset=None, assetvalue=None, startgas=DEFAULT_STARTGAS, gasprice=1, nonce=None, block_obj=None):
         # create new block
         block_obj = block_obj or self.mine()
 
@@ -233,15 +237,23 @@ class state(object):
         cursor.execute('''INSERT INTO transactions ({}) VALUES ({})'''.format(", ".join(tx.keys()), ", ".join("?" * len(tx.keys()))), tx.values())
         cursor.close()
 
-        tx_obj = transactions.Transaction(tx, nonce=0, to=Address.normalize(to), gasprice=gasprice, startgas=startgas, value=value, data=data)
+        tx_obj = transactions.Transaction(tx,
+                                          nonce=0,
+                                          to=Address.normalize(to),
+                                          gasprice=gasprice,
+                                          startgas=startgas,
+                                          value=value,
+                                          asset=asset,
+                                          assetvalue=assetvalue,
+                                          data=data)
 
         # @TODO
         tx_obj.nonce = nonce or block_obj.get_nonce(Address.normalize(sender))
 
         return tx, tx_obj, block_obj
 
-    def do_send(self, sender, to, value, data, startgas=DEFAULT_STARTGAS, block_obj=None):
-        print('DOSEND', sender, to, value, data)
+    def do_send(self, sender, to, value, data, asset=None, assetvalue=None, startgas=DEFAULT_STARTGAS, block_obj=None):
+        logger.debug('DOSEND %s %s %s %s %s %s' % (sender, to, value, asset, assetvalue, data))
 
         if not sender:
             raise NotImplemented
@@ -250,22 +262,22 @@ class state(object):
         sender = Address.normalize(sender)
         to = Address.normalize(to)
 
-        tx, tx_obj, block_obj = self.mock_tx(sender, to, value, data, startgas, block_obj=block_obj)
+        tx, tx_obj, block_obj = self.mock_tx(sender, to, value, asset=asset, assetvalue=assetvalue, data=data, startgas=startgas, block_obj=block_obj)
 
         # Run.
         processblock.MULTIPLIER_CONSTANT_FACTOR = 1
         success, output, gas_remained = processblock.apply_transaction(self.db, block_obj, tx_obj)
 
-        print('DOSEND-', success, output, gas_remained)
+        logger.debug('DOSEND DONE %s %s %s' % (success, output, gas_remained))
 
         # Decode, return result.
         return tx_obj, success, output
 
-    def _send(self, sender, to, value, evmdata=b'', output=None, funid=None, abi=None, startgas=DEFAULT_STARTGAS, block_obj=None):
+    def _send(self, sender, to, value, evmdata=b'', output=None, asset=None, assetvalue=None, funid=None, abi=None, startgas=DEFAULT_STARTGAS, block_obj=None):
         if funid is not None or abi is not None:
             raise Exception("Send with funid+abi is deprecated. Please use the abi_contract mechanism")
 
-        tx, s, o = self.do_send(sender, to, value, evmdata, startgas, block_obj=block_obj)
+        tx, s, o = self.do_send(sender, to, value, asset=asset, assetvalue=assetvalue, data=evmdata, startgas=startgas, block_obj=block_obj)
 
         if not s:
             raise TransactionFailed()
@@ -274,12 +286,6 @@ class state(object):
 
     def send(self, *args, **kwargs):
         return self._send(*args, **kwargs)['output']
-
-    def trace(self, sender, to, value, data=[]):
-        # collect log events (independent of loglevel filters)
-        # recorder = LogRecorder()
-        self.send(sender, to, value, data)
-        # return recorder.pop_records()
 
     def set_balance(self, address, value):
         util.credit(self.db, address.base58(), 'XCP', value, action='set_balance', event=None)

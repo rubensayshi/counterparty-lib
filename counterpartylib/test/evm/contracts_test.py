@@ -117,7 +117,7 @@ def test_sixten():
     s = state()
 
     # mock tx
-    tx, tx_obj, block_obj = s.mock_tx(tester.a0, tester.a1, 0, b'')
+    tx, tx_obj, block_obj = s.mock_tx(sender=tester.a0, to=tester.a1, value=0, data=b'')
 
     # set code for contract
     s.block.set_code(tx_obj, tester.a1, tester.serpent.compile_lll(sixten_code))

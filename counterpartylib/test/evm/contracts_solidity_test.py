@@ -120,7 +120,7 @@ def pytest_generate_tests(metafunc):
     else:
         both = False
         # pattern match for quick run
-        for fnpattern in ['test_send', 'test_received', 'test_crowdfund']:
+        for fnpattern in ['test_send', 'test_crowdfund']:
             if fnpattern in metafunc.function.__name__:
                 both = True
                 break
@@ -272,9 +272,14 @@ contract testme {
     s = state()
     c = s.abi_contract(code, language='solidity')
 
-    r = c.main1()
+    logger.warn('----------------------------------------------------------------------------')
+    logger.warn('----------------------------------------------------------------------------')
+    logger.warn('----------------------------------------------------------------------------')
+    logger.warn('----------------------------------------------------------------------------')
+
+    r = c.main1(assetvalue=1, asset='NODIVISIBLE')
     print(r)
-    assert r == [1, ethutils.zpadright(b'XCP', 32)]
+    assert r == [1, ethutils.zpadright(b'NODIVISIBLE', 32)]
 
     r = c.main2()
     print(r)

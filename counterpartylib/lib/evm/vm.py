@@ -15,6 +15,7 @@ from .ethutils import to_string
 from .slogging import log_dict
 
 from counterpartylib.lib.evm import address
+from counterpartylib.lib.evm import specials
 from counterpartylib.lib.evm.address import Address
 
 log_log = get_logger('eth.vm.log')
@@ -60,8 +61,8 @@ class CallData(object):
 
 class Message(object):
 
-    def __init__(self, sender, to, value, gas, data, depth=0, 
-            code_address=None, is_create=False, transfers_value=True):
+    def __init__(self, sender, to, value, gas, data, depth=0,
+            code_address=None, is_create=False, transfers_value=True, asset=None, assetvalue=None):
 
         self.sender = sender
         self.to = to
@@ -73,6 +74,8 @@ class Message(object):
         self.code_address = code_address
         self.is_create = is_create
         self.transfers_value = transfers_value
+        self.asset = asset
+        self.assetvalue = assetvalue
 
     def __repr__(self):
         return '<Message(to:%s...)>' % str(self.to)[:8]

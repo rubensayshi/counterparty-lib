@@ -19,7 +19,7 @@ secpk1n = 1157920892373161954235709850086879078528375642790749043826051631415181
 
 
 class Transaction(object):
-    def __init__(self, tx, nonce, to, gasprice, startgas, value, data):
+    def __init__(self, tx, nonce, to, gasprice, startgas, value, asset, assetvalue, data):
         assert type(data) == bytes
         assert to is None or isinstance(to, Address)
         self.block_index = tx['block_index']
@@ -31,6 +31,8 @@ class Transaction(object):
         self.gasprice = gasprice
         self.startgas = startgas
         self.value = value
+        self.asset = asset
+        self.assetvalue = assetvalue
         self.nonce = nonce
         self.timestamp = tx['block_time']
 
@@ -48,7 +50,9 @@ class Transaction(object):
                  'gasprice': self.gasprice,
                  'startgas': self.startgas,
                  'value': self.value,
-                 'nonce': self.nonce
+                 'nonce': self.nonce,
+                 'asset': self.asset,
+                 'assetvalue': self.assetvalue
                 }
         return dict_
 
