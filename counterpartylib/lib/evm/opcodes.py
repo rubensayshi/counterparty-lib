@@ -61,6 +61,7 @@ opcodes = {
     0xa2: ['LOG2', 4, 0, 1125],
     0xa3: ['LOG3', 5, 0, 1500],
     0xa4: ['LOG4', 6, 0, 1875],
+    0xef: ['RESERVED', 0, 0, 1],
     0xf0: ['CREATE', 3, 1, 32000],
     0xf1: ['CALL', 7, 1, 40],
     0xf2: ['CALLCODE', 7, 1, 40],
@@ -80,6 +81,17 @@ reverse_opcodes = {}
 for o in opcodes:
     vars()[opcodes[o][0]] = opcodes[o]
     reverse_opcodes[opcodes[o][0]] = o
+
+custom_opcodes = {
+    0x01: ['ASSET', 0, 1, 2],
+    0x02: ['ASSETVALUE', 0, 1, 2],
+    0x20: ['CALLWITHASSET', 9, 1, 40],
+}
+
+reverse_custom_opcodes = {}
+for o in custom_opcodes:
+    vars()['CUSTOM_' + custom_opcodes[o][0]] = custom_opcodes[o]
+    reverse_custom_opcodes['CUSTOM_' + custom_opcodes[o][0]] = o
 
 # Non-opcode gas prices
 GDEFAULT = 1

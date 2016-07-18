@@ -112,9 +112,12 @@ def proc_sendasset(ext, msg):
 def proc_receivedasset(ext, msg):
     gas_cost = opcodes.GRIPEMD160BASE
 
-    logger.warn('proc_receivedasset %d %s' % (msg.assetvalue, msg.asset))
+    logger.warn('proc_receivedasset %s %s' % (msg.assetvalue, msg.asset))
 
-    o = ethutils.zpad(ethutils.encode_int(msg.assetvalue), 32) + ethutils.zpadright(msg.asset, 32)
+    if msg.assetvalue and msg.asset:
+        o = ethutils.zpad(ethutils.encode_int(msg.assetvalue), 32) + ethutils.zpadright(msg.asset, 32)
+    else:
+        o = ethutils.zpad(ethutils.encode_int(0), 32) + ethutils.zpadright(b'', 32)
 
     return 1, msg.gas - gas_cost, o
 

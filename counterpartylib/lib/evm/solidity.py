@@ -60,9 +60,9 @@ class solc_wrapper(object):
         return names
 
     @classmethod
-    def compile(cls, code, path=None, libraries=None, contract_name=''):
+    def compile(cls, code, path=None, libraries=None, contract_name='', optimize=True):
         "returns binary of last contract in code"
-        sorted_contracts = cls.combined(code, path=path)
+        sorted_contracts = cls.combined(code, path=path, optimize=optimize)
 
         if contract_name:
             idx = [x[0] for x in sorted_contracts].index(contract_name)

@@ -62,7 +62,7 @@ class CallData(object):
 class Message(object):
 
     def __init__(self, sender, to, value, gas, data, depth=0,
-            code_address=None, is_create=False, transfers_value=True, asset=None, assetvalue=None):
+            code_address=None, is_create=False, transfers_value=True, asset='', assetvalue=0):
 
         self.sender = sender
         self.to = to
@@ -74,8 +74,8 @@ class Message(object):
         self.code_address = code_address
         self.is_create = is_create
         self.transfers_value = transfers_value
-        self.asset = asset
-        self.assetvalue = assetvalue
+        self.asset = asset or ''
+        self.assetvalue = assetvalue or 0
 
     def __repr__(self):
         return '<Message(to:%s...)>' % str(self.to)[:8]
@@ -99,9 +99,11 @@ def preprocess_code(code):
     code = memoryview(code).tolist()
     ops = []
     i = 0
+
     while i < len(code):
         o = copy.copy(opcodes.opcodes.get(code[i], ['INVALID', 0, 0, 0]) + [code[i], 0])
         ops.append(o)
+
         if o[0][:4] == 'PUSH':
             for j in range(int(o[0][4:])):
                 i += 1
@@ -177,6 +179,10 @@ def vm_execute(ext, msg, code):
     op = None
     steps = 0
     _prevop = None  # for trace only
+    reserved = False
+
+    import pprint
+    pprint.pprint(opcodes.reverse_custom_opcodes)
 
     while 1:
         # print 'op: ', op, time.time() - s
@@ -187,6 +193,18 @@ def vm_execute(ext, msg, code):
 
         op, in_args, out_args, fee, opcode, pushval = \
             processed_code[compustate.pc]
+
+        if reserved:
+            custom_opcode = opcode
+            reserved = False
+            op, in_args, out_args, fee, opcode, pushval = (opcodes.custom_opcodes.get(opcode, ['INVALID', 0, 0, 0]) + [opcode, 0])
+            opcode = 0xff + opcode  # hacky way to avoid the places where opcode <= is done
+            log_vm_op.warn('RESERVED',
+                custom_opcode=custom_opcode,
+                op=op,
+                opcode=opcode
+            )
+
 
         # out of gas error
         if fee > compustate.gas:
@@ -238,6 +256,10 @@ def vm_execute(ext, msg, code):
             log_vm_op.trace('vm {op}', **trace_data)
             steps += 1
             _prevop = op
+
+        if op == 'RESERVED':
+            reserved = True
+            continue
 
         # Invalid operation
         if op == 'INVALID':
@@ -463,6 +485,10 @@ def vm_execute(ext, msg, code):
                 stk.append(len(mem))
             elif op == 'GAS':
                 stk.append(compustate.gas)  # AFTER subtracting cost 1
+        elif op == 'ASSETVALUE':
+            stk.append(msg.assetvalue)
+        elif op == 'ASSET':
+            stk.append(utils.big_endian_to_int(msg.asset))
         elif op[:4] == 'PUSH':
             pushnum = int(op[4:])
             compustate.pc += pushnum
@@ -550,6 +576,56 @@ def vm_execute(ext, msg, code):
             else:
                 compustate.gas -= (gas + extra_gas - submsg_gas)
                 stk.append(0)
+        elif op == 'CALLWITHASSET':
+            asset, assetvalue, gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \
+                stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop(), stk.pop()
+
+            asset = utils.int_to_big_endian(asset).decode('ascii')
+
+            # @TODO: figure out if we want to allow this, if we do code so it won't conflict with normal `value`
+            # @TODO: throw when asset doesn't exist at all?
+            if asset == 'XCP':
+                return vm_exception('CALLWITHASSET WITH XCP')
+
+            log_vm_op.warn('CALLWITHASSET',
+                           assetvalue=assetvalue,
+                           asset=asset,
+                           gas=gas,
+                           to=to, value=value,
+                           meminstart=meminstart,
+                           meminsz=meminsz,
+                           memoutstart=memoutstart,
+                           memoutsz=memoutsz)
+            if not mem_extend(mem, compustate, op, meminstart, meminsz) or \
+                    not mem_extend(mem, compustate, op, memoutstart, memoutsz):
+                return vm_exception('OOG EXTENDING MEMORY')
+
+            to = Address.normalize(to)
+            extra_gas = (not ext.account_exists(to)) * opcodes.GCALLNEWACCOUNT + \
+                (value > 0) * opcodes.GCALLVALUETRANSFER
+            submsg_gas = gas + opcodes.GSTIPEND * (value > 0)
+
+            if compustate.gas < gas + extra_gas:
+                return vm_exception('OUT OF GAS', needed=gas+extra_gas)
+
+            if msg.depth >= STACK_SIZE_LIMIT or \
+                    value < ext.get_balance(msg.to) or \
+                    (asset and assetvalue < ext.get_balance(msg.to, asset=asset)):
+                compustate.gas -= (gas + extra_gas - submsg_gas)
+                stk.append(0)
+            else:
+                compustate.gas -= (gas + extra_gas)
+                cd = CallData(mem, meminstart, meminsz)
+                call_msg = Message(msg.to, to, value, submsg_gas, cd,
+                                   msg.depth + 1, code_address=to, asset=asset, assetvalue=assetvalue)
+                result, gas, data = ext.msg(call_msg)
+                if result == 0:
+                    stk.append(0)
+                else:
+                    stk.append(1)
+                    compustate.gas += gas
+                    for i in range(min(len(data), memoutsz)):
+                        mem[memoutstart + i] = data[i]
         elif op == 'CALLCODE' or op == 'DELEGATECALL':
             if op == 'CALLCODE':
                 gas, to, value, meminstart, meminsz, memoutstart, memoutsz = \

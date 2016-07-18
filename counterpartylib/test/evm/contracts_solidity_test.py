@@ -286,6 +286,111 @@ contract testme {
     assert r == True
 
 
+def test_roobs1():
+    code = '''
+contract testme {
+    function main1() returns (uint, address) {
+        return (msg.value, msg.sender);
+    }
+
+    function main2() returns (uint, address, uint, address) {
+        var (o1, o2) = main1();
+        return (msg.value, msg.sender, o1, o2);
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(code, language='solidity')
+
+    r = c.main1(value=111)
+    print(r)
+
+    r = c.main2(value=111)
+    print(r)
+
+
+def test_roobs2():
+    code = '''
+contract testme {
+    event LogBare (
+       address caller,
+       uint v,
+       bytes32 a
+    );
+
+    function() {
+        var (v, a) = receivedasset();
+        LogBare(msg.sender, v, a);
+    }
+
+    function callme(address a) {
+        a.call();
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(code, language='solidity')
+
+    r = c.callme(c.address)
+    print(r)
+
+
+def test_roobs3():
+    code = '''
+contract testme {
+    event LogBare (
+       address caller,
+       uint v,
+       bytes32 a
+    );
+
+    function() {
+        var (v, a) = receivedasset();
+        LogBare(msg.sender, v, a);
+    }
+
+    function callme(address a) {
+        a.callwithasset();
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(code, language='solidity')
+
+    r = c.callme(c.address)
+    print(r)
+
+
+def test_roobs4():
+    code = '''
+contract testme {
+    event LogAsset (
+        uint v,
+        bytes32 a
+    );
+
+    function() {
+        LogAsset(msg.assetvalue, msg.asset);
+    }
+
+    function callme(address addr) {
+        LogAsset(msg.assetvalue, msg.asset);
+
+        if (!addr.callwithasset()) throw;
+    }
+}
+'''
+
+    s = state()
+    c = s.abi_contract(code, optimize=False, language='solidity')
+
+    r = c.callme(c.address, asset='DIVISIBLE', assetvalue=101)
+    print(r)
+
+
 def test_bool():
     code = '''
 contract testme {
