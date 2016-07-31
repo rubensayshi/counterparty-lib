@@ -92,7 +92,15 @@ def parse_helper(db, tx, message, unpacker):
 
         # Apply transaction!
         block_obj = blocks.Block(db, tx['block_hash'])
-        tx_obj = transactions.Transaction(tx, nonce=block_obj.get_nonce(tx['source']), to=contract_id, gasprice=1, startgas=startgas, value=value, data=payload)
+        tx_obj = transactions.Transaction(tx,
+                                          nonce=block_obj.get_nonce(tx['source']),
+                                          to=contract_id,
+                                          gasprice=1,
+                                          startgas=startgas,
+                                          value=value,
+                                          asset=None,
+                                          assetvalue=0,
+                                          data=payload)
         success, output, gas_remained = processblock.apply_transaction(db, block_obj, tx_obj)
 
         if not success and output == '':

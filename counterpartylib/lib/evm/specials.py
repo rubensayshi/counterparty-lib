@@ -109,19 +109,6 @@ def proc_sendasset(ext, msg):
     return 1, msg.gas - gas_cost, o
 
 
-def proc_receivedasset(ext, msg):
-    gas_cost = opcodes.GRIPEMD160BASE
-
-    logger.warn('proc_receivedasset %s %s' % (msg.assetvalue, msg.asset))
-
-    if msg.assetvalue and msg.asset:
-        o = ethutils.zpad(ethutils.encode_int(msg.assetvalue), 32) + ethutils.zpadright(msg.asset, 32)
-    else:
-        o = ethutils.zpad(ethutils.encode_int(0), 32) + ethutils.zpadright(b'', 32)
-
-    return 1, msg.gas - gas_cost, o
-
-
 CNTRPRTY = 0x434e545250525459000000000000000000000000
 
 specials = {
@@ -132,7 +119,6 @@ specials = {
         '0000000000000000000000000000000000000003': proc_ripemd160,
         '0000000000000000000000000000000000000004': proc_identity,
         ethutils.encode_int_to_hexstr(CNTRPRTY + 0x01): proc_sendasset,
-        ethutils.encode_int_to_hexstr(CNTRPRTY + 0x02): proc_receivedasset,
     }.items()
 }
 

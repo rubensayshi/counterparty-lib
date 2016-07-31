@@ -96,6 +96,8 @@ class solc_wrapper(object):
         @param optimize: let the compiler optimize the code
         """
 
+        optimize = False  # @TODO: allow
+
         combined_json = 'abi,bin,devdoc,userdoc,structs,statevars'
         args = ['--add-std', '--optimize' if optimize else '', '--combined-json', combined_json]
         cmd = [SOLCBIN] + args

@@ -250,7 +250,7 @@ contract testme {
     assert s.block.get_balance(tester.a1, 'NODIVISIBLE') == b + v
 
 
-def test_receivedasset():
+def test_receivedasset1():
     code = '''
 contract testme {
     bytes32 c = "XCP";
@@ -286,31 +286,7 @@ contract testme {
     assert r == True
 
 
-def test_roobs1():
-    code = '''
-contract testme {
-    function main1() returns (uint, address) {
-        return (msg.value, msg.sender);
-    }
-
-    function main2() returns (uint, address, uint, address) {
-        var (o1, o2) = main1();
-        return (msg.value, msg.sender, o1, o2);
-    }
-}
-'''
-
-    s = state()
-    c = s.abi_contract(code, language='solidity')
-
-    r = c.main1(value=111)
-    print(r)
-
-    r = c.main2(value=111)
-    print(r)
-
-
-def test_roobs2():
+def test_receivedasset2():
     code = '''
 contract testme {
     event LogBare (
@@ -320,11 +296,10 @@ contract testme {
     );
 
     function() {
-        var (v, a) = receivedasset();
-        LogBare(msg.sender, v, a);
+        LogBare(msg.sender, msg.assetvalue, msg.asset);
     }
 
-    function callme(address a) {
+    function call(address a) {
         a.call();
     }
 }
@@ -333,11 +308,17 @@ contract testme {
     s = state()
     c = s.abi_contract(code, language='solidity')
 
-    r = c.callme(c.address)
-    print(r)
+    o = []
+    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
+
+    c.call(c.address)
+    assert o[0] == {'_event_type': b'LogBare',
+          'caller': 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8',
+          'a': b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
+          'v': 0}
 
 
-def test_roobs3():
+def test_receivedasset3():
     code = '''
 contract testme {
     event LogBare (
@@ -347,11 +328,10 @@ contract testme {
     );
 
     function() {
-        var (v, a) = receivedasset();
-        LogBare(msg.sender, v, a);
+        LogBare(msg.sender, msg.assetvalue, msg.asset);
     }
 
-    function callme(address a) {
+    function call(address a) {
         a.callwithasset();
     }
 }
@@ -360,35 +340,14 @@ contract testme {
     s = state()
     c = s.abi_contract(code, language='solidity')
 
-    r = c.callme(c.address)
-    print(r)
+    o = []
+    s.log_listeners.append(lambda x: o.append(c._translator.listen(x)))
 
-
-def test_roobs4():
-    code = '''
-contract testme {
-    event LogAsset (
-        uint v,
-        bytes32 a
-    );
-
-    function() {
-        LogAsset(msg.assetvalue, msg.asset);
-    }
-
-    function callme(address addr) {
-        LogAsset(msg.assetvalue, msg.asset);
-
-        if (!addr.callwithasset()) throw;
-    }
-}
-'''
-
-    s = state()
-    c = s.abi_contract(code, optimize=False, language='solidity')
-
-    r = c.callme(c.address, asset='DIVISIBLE', assetvalue=101)
-    print(r)
+    c.call(c.address, assetvalue=1, asset='NODIVISIBLE')
+    assert o[0] == {'_event_type': b'LogBare',
+          'caller': 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8',
+          'a': b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00NODIVISIBLE',
+          'v': 1}
 
 
 def test_bool():
