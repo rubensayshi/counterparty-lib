@@ -1140,28 +1140,60 @@ UNITTEST_VECTOR = {
     'execute': {
         'compose': [{
             'comment': 'test_evm.main(2, 5) gzip',
-            'in': (ADDR[0], 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt', 1, 1000000, 0, 'cc572cf900000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005'),
+            'in': (ADDR[0], 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt', 1, 1000000, 0, None, 0, 'cc572cf900000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005'),
             'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x13x\x9c;\x13\xae\xf3\x93\x01?`" \xcf\n\x00\x98\x11\x02P')
         }, {
             'comment': 'test_evm.main(2, 5) nogzip',
-            'in': (ADDR[0], 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt', 1, 1000000, 0, 'cc572cf900000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005', False),
+            'in': (ADDR[0], 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt', 1, 1000000, 0, None, 0, 'cc572cf900000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005', False),
             'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00D\xccW,\xf9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05')
         }, {
             'comment': 'mul2_code.mul2(5) gzip',
-            'in': (ADDR[0], 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8', 1, 1000000, 0, '771f34660000000000000000000000000000000000000000000000000000000000000005',),
+            'in': (ADDR[0], 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8', 1, 1000000, 0, None, 0, '771f34660000000000000000000000000000000000000000000000000000000000000005',),
             'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\xe3\xc0\x90l\x8a\xc6\xc7"h;\x1f\xd5?Y\xd0\xed\xcdOX(\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x0fx\x9c+\x977Ic\xc0\x0fX\x01)0\x016')
         }, {
             'comment': 'mul2_code.mul2(5) nogzip',
-            'in': (ADDR[0], 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8', 1, 1000000, 0, '771f34660000000000000000000000000000000000000000000000000000000000000005', False),
+            'in': (ADDR[0], 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8', 1, 1000000, 0, None, 0, '771f34660000000000000000000000000000000000000000000000000000000000000005', False),
             'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\xe3\xc0\x90l\x8a\xc6\xc7"h;\x1f\xd5?Y\xd0\xed\xcdOX(\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00$w\x1f4f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05')
+        }, {
+            'comment': 'test_evm.main(2, 5) gzip withasset',
+            'in': (ADDR[0], 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt', 1, 1000000, 0, 'NODIVISIBLE', 100, 'cc572cf900000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000005'),
+            'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\xca\xd8\xdc\x7f\x0bf\x00\x00\x00\x00\x00\x00\x00d\x13x\x9c;\x13\xae\xf3\x93\x01?`" \xcf\n\x00\x98\x11\x02P')
+        }, {
+            'comment': 'mul2_code.mul2(5) gzip withasset',
+            'in': (ADDR[0], 'ts2T738tztDcSsYJghraUq9iqfbHdgpbW8', 1, 1000000, 0, 'NODIVISIBLE', 100, '771f34660000000000000000000000000000000000000000000000000000000000000005', False),
+            'out': ('mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc', [], b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\xe3\xc0\x90l\x8a\xc6\xc7"h;\x1f\xd5?Y\xd0\xed\xcdOX(\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\xca\xd8\xdc\x7f\x0bf\x00\x00\x00\x00\x00\x00\x00d$w\x1f4f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05')
         }],
         'parse': [{
-            'comment': 'test_evm.main(2, 5) nogzip',
+        #     'comment': 'test_evm.main(2, 5) nogzip',
+        #     'in': ({'tx_hash': 'db6d9052b576d973196363e11163d492f50926c2f1d1efd67b3d999817b0d04d',
+        #             'source': 'mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc',
+        #             'destination': '',
+        #             'supported': 1, 'block_index': DP['default_block_index'], 'fee': 10000, 'block_time': 155409000, 'block_hash': DP['default_block_hash'], 'btc_amount': 7800, 'tx_index': 502,
+        #             'data': b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00D\xccW,\xf9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05'},),
+        #     'records': [
+        #         {'table': 'executions', 'values': {
+        #             'block_index': DP['default_block_index'],
+        #             'contract_id': 'tXsNynQTeMkCQVBKMVnHwov1rTjpUYdVSt',
+        #             'data': b'\xccW,\xf9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05',
+        #             'gas_cost': 21787,
+        #             'gas_price': 1,
+        #             'gas_remained': 978213,
+        #             'gas_start': 1000000,
+        #             'output': binascii.unhexlify('0000000000000000000000000000000000000000000000000000000000000020'),
+        #             'source': 'mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc',
+        #             'status': 'valid',
+        #             'tx_hash': 'db6d9052b576d973196363e11163d492f50926c2f1d1efd67b3d999817b0d04d',
+        #             'tx_index': 502,
+        #             'value': 0}
+        #         }
+        #     ],
+        # }, {
+            'comment': 'test_evm.main(2, 5) gzip, withoutasset',
             'in': ({'tx_hash': 'db6d9052b576d973196363e11163d492f50926c2f1d1efd67b3d999817b0d04d',
                     'source': 'mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc',
                     'destination': '',
                     'supported': 1, 'block_index': DP['default_block_index'], 'fee': 10000, 'block_time': 155409000, 'block_hash': DP['default_block_hash'], 'btc_amount': 7800, 'tx_index': 502,
-                    'data': b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00D\xccW,\xf9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05'},),
+                    'data': b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x13x\x9c;\x13\xae\xf3\x93\x01?`" \xcf\n\x00\x98\x11\x02P'},),
             'records': [
                 {'table': 'executions', 'values': {
                     'block_index': DP['default_block_index'],
@@ -1180,12 +1212,12 @@ UNITTEST_VECTOR = {
                 }
             ],
         }, {
-            'comment': 'test_evm.main(2, 5) gzip',
+            'comment': 'test_evm.main(2, 5) gzip, withasset',
             'in': ({'tx_hash': 'db6d9052b576d973196363e11163d492f50926c2f1d1efd67b3d999817b0d04d',
                     'source': 'mn6q3dS2EnDUx3bmyWc6D4szJNVGtaR7zc',
                     'destination': '',
                     'supported': 1, 'block_index': DP['default_block_index'], 'fee': 10000, 'block_time': 155409000, 'block_hash': DP['default_block_hash'], 'btc_amount': 7800, 'tx_index': 502,
-                    'data': b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x13x\x9c;\x13\xae\xf3\x93\x01?`" \xcf\n\x00\x98\x11\x02P'},),
+                    'data': b'\x00\x00\x00h\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x11\x9e\xfc\xb7s\xcf7h\xd0K\xdfy\x7f|6\x05\x80\x8d\xce\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0fB@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\xca\xd8\xdc\x7f\x0bf\x00\x00\x00\x00\x00\x00\x00d\x13x\x9c;\x13\xae\xf3\x93\x01?`" \xcf\n\x00\x98\x11\x02P'},),
             'records': [
                 {'table': 'executions', 'values': {
                     'block_index': DP['default_block_index'],

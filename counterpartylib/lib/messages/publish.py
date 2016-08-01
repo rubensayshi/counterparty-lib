@@ -27,6 +27,9 @@ def unpack(db, message):
         codelenlen = len(VarIntSerializer.serialize(codelen))
         code = code[codelenlen:(codelenlen + codelen)]
 
+        if len(message) != LENGTH + codelen + codelenlen:
+            raise exceptions.UnpackError("failed to consume whole message")
+
         # try to ungzip
         try:
             code = zlib.decompress(code)
@@ -36,7 +39,7 @@ def unpack(db, message):
     except (struct.error) as e:
         raise exceptions.UnpackError()
 
-    return None, gasprice, startgas, endowment, code
+    return None, gasprice, startgas, endowment, None, 0, code
 
 
 def compose(db, source, gasprice, startgas, endowment, code_hex, gzip=None):

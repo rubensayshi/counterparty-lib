@@ -6,24 +6,36 @@ from bitcoin.core import VarIntSerializer
 logger = logging.getLogger(__name__)
 
 from counterpartylib.lib import (util, config, exceptions)
-from counterpartylib.lib.evm import exceptions as evmexceptions, transactions, blocks, processblock
+from counterpartylib.lib.evm import exceptions as evmexceptions, transactions, blocks, processblock, ethutils
 from counterpartylib.lib.evm.address import Address
 
-FORMAT = '>32sQQQ'
-LENGTH = 56
+WITHOUTASSET_FORMAT = '>32sQQQ'
+WITHOUTASSET_LENGTH = 56
+WITHASSET_FORMAT = '>32sQQQQQ'
+WITHASSET_LENGTH = 72
 ID = 104
 
 
 def unpack(db, message):
-    curr_format = FORMAT + '{}s'.format(len(message) - LENGTH)
     try:
-        contract_id, gasprice, startgas, value, payload = struct.unpack(curr_format, message)
-        if gasprice > config.MAX_INT or startgas > config.MAX_INT: # TODO: define max for gasprice and startgas
+        return _unpack_withasset(db, message)
+    except exceptions.UnpackError as e:
+        return _unpack_withoutasset(db, message)
+
+
+def _unpack_withasset(db, message):
+    curr_format = WITHASSET_FORMAT + '{}s'.format(len(message) - WITHASSET_LENGTH)
+    try:
+        contract_id, gasprice, startgas, value, asset, assetvalue, payload = struct.unpack(curr_format, message)
+        if gasprice > config.MAX_INT or startgas > config.MAX_INT:  # TODO: define max for gasprice and startgas
             raise exceptions.UnpackError()
 
         payloadlen = VarIntSerializer.deserialize(payload)
         payloadlenlen = len(VarIntSerializer.serialize(payloadlen))
         payload = payload[payloadlenlen:(payloadlenlen + payloadlen)]
+
+        if len(message) != WITHASSET_LENGTH + payloadlen + payloadlenlen:
+            raise exceptions.UnpackError("failed to consume whole message")
 
         # try to ungzip
         try:
@@ -31,18 +43,49 @@ def unpack(db, message):
         except zlib.error:
             pass
 
-    except (struct.error) as e:
-        raise exceptions.UnpackError()
+    except struct.error as e:
+        raise exceptions.UnpackError(str(e))
 
     if contract_id == b'\x00' * 32:
         contract_id = None
     else:
         contract_id = Address.normalize(contract_id)
 
-    return contract_id, gasprice, startgas, value, payload
+    return contract_id, gasprice, startgas, value, asset, assetvalue, payload
 
 
-def compose(db, source, contract_id, gasprice, startgas, value, payload_hex, gzip=None):
+def _unpack_withoutasset(db, message):
+    curr_format = WITHOUTASSET_FORMAT + '{}s'.format(len(message) - WITHOUTASSET_LENGTH)
+    try:
+        contract_id, gasprice, startgas, value, payload = struct.unpack(curr_format, message)
+        if gasprice > config.MAX_INT or startgas > config.MAX_INT:  # TODO: define max for gasprice and startgas
+            raise exceptions.UnpackError()
+
+        payloadlen = VarIntSerializer.deserialize(payload)
+        payloadlenlen = len(VarIntSerializer.serialize(payloadlen))
+        payload = payload[payloadlenlen:(payloadlenlen + payloadlen)]
+
+        if len(message) != WITHOUTASSET_LENGTH + payloadlen + payloadlenlen:
+            raise exceptions.UnpackError("failed to consume whole message")
+
+        # try to ungzip
+        try:
+            payload = zlib.decompress(payload)
+        except zlib.error:
+            pass
+
+    except struct.error as e:
+        raise exceptions.UnpackError(e)
+
+    if contract_id == b'\x00' * 32:
+        contract_id = None
+    else:
+        contract_id = Address.normalize(contract_id)
+
+    return contract_id, gasprice, startgas, value, None, 0, payload
+
+
+def compose(db, source, contract_id, gasprice, startgas, value, asset, assetvalue, payload_hex, gzip=None):
     if not util.enabled('evmparty'):
         return
 
@@ -55,6 +98,8 @@ def compose(db, source, contract_id, gasprice, startgas, value, payload_hex, gzi
     if gasprice < 0:
         raise evmexceptions.ContractError('negative gasprice')
 
+    if (asset and not assetvalue) or (assetvalue and not asset):
+        raise evmexceptions.ContractError('asset and assetvalue both need to be specified')
 
     # use gzip if smaller or when gzip=True
     if gzip or gzip is None:
@@ -63,11 +108,19 @@ def compose(db, source, contract_id, gasprice, startgas, value, payload_hex, gzi
             logger.debug('gzip payload %d < %d' % (len(gzpayload), len(payload)))
             payload = gzpayload
 
-    # Pack.
-    data = struct.pack(config.TXTYPE_FORMAT, ID)
-    data += struct.pack(FORMAT, contract_id.bytes32() if contract_id else b'', gasprice, startgas, value)
-    data += VarIntSerializer.serialize(len(payload))
-    data += payload
+    if asset:
+        # Pack.
+        data = struct.pack(config.TXTYPE_FORMAT, ID)
+        data += struct.pack(WITHASSET_FORMAT, contract_id.bytes32() if contract_id else b'', gasprice, startgas, value, util.generate_asset_id(asset, util.CURRENT_BLOCK_INDEX), assetvalue)  # @TODO: safe to convert asset to int?
+        data += VarIntSerializer.serialize(len(payload))
+        data += payload
+    else:
+        # Pack.
+        data = struct.pack(config.TXTYPE_FORMAT, ID)
+        data += struct.pack(WITHOUTASSET_FORMAT, contract_id.bytes32() if contract_id else b'', gasprice, startgas, value)  # @TODO: safe to convert asset to int?
+        data += VarIntSerializer.serialize(len(payload))
+        data += payload
+
 
     return (source, [], data)
 
@@ -84,11 +137,14 @@ def parse_helper(db, tx, message, unpacker):
     Because publish and execute messages are so similar this helper us used by both and only the unpacker differs
     """
     status = 'valid'
-    contract_id, gasprice, startgas, value, payload, output, gas_cost, gas_remained = None, None, None, None, None, None, None, None
+    contract_id, gasprice, startgas, value, assetvalue, asset, payload, output, gas_cost, gas_remained = None, None, None, None, None, None, None, None, None, None
 
     try:
         # Unpack message.
-        contract_id, gasprice, startgas, value, payload = unpacker(db, message)
+        contract_id, gasprice, startgas, value, asset_id, assetvalue, payload = unpacker(db, message)
+
+        if asset_id:
+            asset = util.get_asset_name(db, asset_id, util.CURRENT_BLOCK_INDEX)
 
         # Apply transaction!
         block_obj = blocks.Block(db, tx['block_hash'])
@@ -98,8 +154,8 @@ def parse_helper(db, tx, message, unpacker):
                                           gasprice=1,
                                           startgas=startgas,
                                           value=value,
-                                          asset=None,
-                                          assetvalue=0,
+                                          asset=asset,
+                                          assetvalue=assetvalue,
                                           data=payload)
         success, output, gas_remained = processblock.apply_transaction(db, block_obj, tx_obj)
 
@@ -129,6 +185,7 @@ def parse_helper(db, tx, message, unpacker):
         contract_id = contract_id.base58()
 
     # Add parsed transaction to message-type–specific table.
+    # @TODO: add asset / assetvalue
     bindings = {
         'tx_index': tx['tx_index'],
         'tx_hash': tx['tx_hash'],
