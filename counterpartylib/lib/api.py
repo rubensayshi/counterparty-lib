@@ -384,18 +384,30 @@ class APIServer(threading.Thread):
     """Handle JSON-RPC API calls."""
     def __init__(self):
         self.is_ready = False
+        self.shutdown_secret = binascii.hexlify(os.urandom(32)).decode('ascii')
         threading.Thread.__init__(self)
         self.stop_event = threading.Event()
 
+        self.app = None
+
     def stop(self):
+        util.api('shutdown', {'secret': self.shutdown_secret})
         self.join()
         self.stop_event.set()
 
     def run(self):
         logger.info('Starting API Server.')
         db = database.get_connection(read_only=True, integrity_check=False)
-        app = flask.Flask(__name__)
+        self.app = app = flask.Flask(__name__)
         auth = HTTPBasicAuth()
+
+        @dispatcher.add_method
+        def shutdown(secret):
+            assert self.shutdown_secret and secret == self.shutdown_secret
+            func = flask.request.environ.get('werkzeug.server.shutdown')
+            if func is None:
+                raise RuntimeError("Can't shutdown...")
+            func()
 
         @auth.get_password
         def get_pw(username):

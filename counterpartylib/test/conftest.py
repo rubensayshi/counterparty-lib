@@ -112,6 +112,7 @@ def api_server(request, cp_server):
     # start RPC server and wait for server to be ready
     api_server = api.APIServer()
     api_server.daemon = True
+    request.addfinalizer(lambda: api_server.stop())
     api_server.start()
     for attempt in range(5000):  # wait until server is ready.
         if api_server.is_ready:
