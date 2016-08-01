@@ -45,6 +45,11 @@ def main():
         if description['encode_types'][i].startswith('int') or description['encode_types'][i].startswith('uint'):
             function_args[i] = int(arg)
 
+    # cast string to bytes
+    for i, arg in enumerate(function_args):
+        if description['encode_types'][i].startswith('bytes'):
+            function_args[i] = arg.encode('utf-8')
+
     data = translator.encode_function_call(function_name, function_args)
 
     print(binascii.hexlify(data).decode('ascii'))
