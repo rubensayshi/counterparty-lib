@@ -57,8 +57,7 @@ def make_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
 
     return {
         "state": state,
-        "topublish": rawtx,
-        "deposit_script": util.b2h(script)
+        "topublish": rawtx
     }
 
 
@@ -309,17 +308,10 @@ def _deposit_status(dispatcher, asset, script, netcode):
     transactions = dispatcher.get("search_raw_transactions")(address)
     if len(transactions) == 0:
         return 0, 0, 0
+    oldest_confirms = transactions[0]["confirmations"]
     asset_balance, btc_balance = _get_address_balance(
         dispatcher, asset, address
     )
-    try:
-        oldest_confirms = transactions[0]["confirmations"]
-        newest_confirms = transactions[-1]["confirmations"]
-    except KeyError as e:
-        print(json.dumps(transactions, indent=2))
-        raise e
-    if newest_confirms == 0:
-        return 0, asset_balance, btc_balance
     return oldest_confirms, asset_balance, btc_balance
 
 
@@ -459,6 +451,7 @@ def _can_spend_from_address(dispatcher, asset, address):
 
 
 def _get_address_balance(dispatcher, asset, address):
+    # FIXME test ignores unconfirmed
     result = dispatcher.get("get_balances")(filters=[
         {'field': 'address', 'op': '==', 'value': address},
         {'field': 'asset', 'op': '==', 'value': asset},

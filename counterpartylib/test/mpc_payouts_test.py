@@ -30,6 +30,8 @@ BOB_PUBKEY = wif2pubkey(BOB_WIF)
 @pytest.mark.usefixtures("api_server")
 def test_standard_usage_xcp(server_db):
     pass  # TODO test
+    # with open("temp.json", "w") as fp:
+    #     json.dump(result, fp, indent=2)
 
 
 @pytest.mark.usefixtures("server_db")
