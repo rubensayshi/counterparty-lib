@@ -4,7 +4,6 @@
 
 
 import copy
-import json
 import pycoin
 from . import util
 from . import validate
@@ -165,7 +164,7 @@ def add_commit(dispatcher, state, commit_rawtx, commit_script, netcode):
     raise ValueError("No revoke secret for given commit script.")
 
 
-def revoke_secret_hashes_above(dispatcher, state, quantity):
+def revoke_hashes_until(dispatcher, state, quantity, surpass):
 
     # validate input
     validate.state(state)
@@ -174,15 +173,22 @@ def revoke_secret_hashes_above(dispatcher, state, quantity):
     # get revoke secret hashes
     revoke_secret_hashes = []
     _order_active(dispatcher, state)
+    exact_match = False
     for commit in reversed(state["commits_active"][:]):
         asset = state["asset"]
         rawtx = commit["rawtx"]
-        if quantity < _get_quantity(dispatcher, asset, rawtx):
+        commit_quantity = _get_quantity(dispatcher, asset, rawtx)
+        exact_match = quantity == commit_quantity
+        if quantity < commit_quantity:
             script = util.h2b(commit["script"])
             secret_hash = scripts.get_commit_revoke_secret_hash(script)
             revoke_secret_hashes.append(secret_hash)
         else:
             break
+
+    # prevent revoking past quantity unless explicitly requested
+    if not exact_match and not surpass and len(revoke_secret_hashes) > 0:
+        revoke_secret_hashes.pop()
 
     return revoke_secret_hashes
 
