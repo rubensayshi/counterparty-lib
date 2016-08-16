@@ -859,6 +859,12 @@ class APIServer(threading.Thread):
             return micropayments.recoverables(dispatcher, state, netcode,
                                               fee, regular_dust_size)
 
+        @dispatcher.add_method
+        def mpc_deposit_expired(state, clearance=0):
+            netcode = "XTN" if config.TESTNET else "BTC"
+            return micropayments.deposit_expired(dispatcher, state,
+                                                 clearance, netcode)
+
         ######################
         # JSON-RPC API
         ######################

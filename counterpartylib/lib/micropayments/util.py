@@ -5,6 +5,8 @@ from pycoin.serialize import h2b  # NOQA
 from pycoin.serialize import b2h_rev  # NOQA
 from pycoin.encoding import hash160  # NOQA
 from pycoin.key.BIP32Node import BIP32Node
+from pycoin.key import Key
+from pycoin.encoding import sec_to_public_pair, public_pair_to_sec, to_bytes_32
 
 
 def gettxid(rawtx):
@@ -17,7 +19,7 @@ def random_wif(netcode="BTC"):
 
 
 def wif2sec(wif):
-    return pycoin.key.Key.from_text(wif).sec()
+    return Key.from_text(wif).sec()
 
 
 def wif2pubkey(wif):
@@ -25,11 +27,24 @@ def wif2pubkey(wif):
 
 
 def wif2address(wif):
-    return pycoin.key.Key.from_text(wif).address()
+    return Key.from_text(wif).address()
 
 
 def wif2secretexponent(wif):
-    return pycoin.key.Key.from_text(wif).secret_exponent()
+    return Key.from_text(wif).secret_exponent()
+
+
+def wif2privkey(wif):
+    key = Key.from_text(wif)
+    secret_exp = key.secret_exponent()
+    return to_bytes_32(secret_exp)
+
+
+def decode_pubkey(pubkey):
+    """Decode compressed hex pubkey."""
+    compressed_pubkey = h2b(pubkey)
+    public_pair = sec_to_public_pair(compressed_pubkey)
+    return public_pair_to_sec(public_pair, compressed=False)
 
 
 def pubkey2address(pubkey, netcode="BTC"):
