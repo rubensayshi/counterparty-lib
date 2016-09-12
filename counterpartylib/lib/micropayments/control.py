@@ -34,6 +34,25 @@ INITIAL_STATE = {
 }
 
 
+def get_published_commit(dispatcher, state, netcode):
+    deposit_script = util.h2b(state["deposit_script"])
+    deposit_address = util.script2address(deposit_script, netcode)
+    deposit_transactions = dispatcher.get("search_raw_transactions")(
+        address=deposit_address, unconfirmed=True
+    )
+    deposit_txids = [tx["txid"] for tx in deposit_transactions]
+    commits = state["commits_active"] + state["commits_revoked"]
+    for commit_script in [util.h2b(commit["script"]) for commit in commits]:
+        commit_address = util.script2address(commit_script, netcode)
+        commit_transactions = dispatcher.get("search_raw_transactions")(
+            address=commit_address, unconfirmed=True
+        )
+        for commit_transaction in commit_transactions:
+            if commit_transaction["txid"] in deposit_txids:
+                return commit_transaction["hex"]  # spend: deposit -> commit
+    return None
+
+
 def make_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
                  spend_secret_hash, expire_time, quantity,
                  netcode, fee, regular_dust_size):
@@ -314,7 +333,7 @@ def _deposit_status(dispatcher, asset, script, netcode):
     transactions = dispatcher.get("search_raw_transactions")(address)
     if len(transactions) == 0:
         return 0, 0, 0
-    oldest_confirms = transactions[0]["confirmations"]
+    oldest_confirms = transactions[0].get("confirmations", 0)
     asset_balance, btc_balance = _get_address_balance(
         dispatcher, asset, address
     )
@@ -416,11 +435,7 @@ def _create_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
     dest_address = util.script2address(script, netcode)
     _validate_channel_unused(dispatcher, dest_address)
     payer_address = util.pubkey2address(payer_pubkey, netcode)
-
-    # provide extra btc for future closing channel fees
-    # change tx or recover + commit tx + payout tx or revoke tx
-    extra_btc = (fee + regular_dust_size) * 3
-
+    extra_btc = util.get_fee_multaple(3)  # for change + commit + recover tx
     rawtx = _create_tx(dispatcher, asset, payer_address, dest_address,
                        quantity, extra_btc, fee, regular_dust_size, False)
     return rawtx, script
@@ -452,7 +467,7 @@ def _can_spend_from_address(dispatcher, asset, address):
 
     # can only spend if all txs confirmed
     transactions = dispatcher.get("search_raw_transactions")(address)
-    latest_confirms = transactions[-1]["confirmations"]
+    latest_confirms = transactions[-1].get("confirmations", 0)
     return latest_confirms > 0
 
 

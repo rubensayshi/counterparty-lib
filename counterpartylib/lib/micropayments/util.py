@@ -7,6 +7,7 @@ from pycoin.encoding import hash160  # NOQA
 from pycoin.key.BIP32Node import BIP32Node
 from pycoin.key import Key
 from pycoin.encoding import sec_to_public_pair, public_pair_to_sec, to_bytes_32
+from counterpartylib.lib import config
 
 
 def gettxid(rawtx):
@@ -15,7 +16,7 @@ def gettxid(rawtx):
 
 
 def random_wif(netcode="BTC"):
-    return BIP32Node.from_master_secret(os.urandom(256), netcode=netcode).wif()
+    return BIP32Node.from_master_secret(os.urandom(32), netcode=netcode).wif()
 
 
 def wif2sec(wif):
@@ -67,3 +68,10 @@ def hash160hex(hexdata):
 
 def tosatoshis(btcamount):
     return int(btcamount * 100000000)
+
+
+def get_fee_multaple(factor=1, fee_per_kb=config.DEFAULT_FEE_PER_KB,
+                     regular_dust_size=config.DEFAULT_REGULAR_DUST_SIZE):
+    # FIXME try to get current values from bitcond instead
+    future_tx_fee = fee_per_kb / 2  # mpc tx always < 512 bytes
+    return int((future_tx_fee + regular_dust_size) * factor)

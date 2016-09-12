@@ -15,4 +15,5 @@ from .control import transferred_amount  # NOQA
 from .control import payouts  # NOQA
 from .control import recoverables  # NOQA
 from .control import deposit_expired  # NOQA
+from .control import get_published_commit  # NOQA
 from . import util  # NOQA

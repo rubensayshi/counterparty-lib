@@ -249,6 +249,7 @@ def sign_expire_recover(get_tx_func, payer_wif, rawtx, deposit_script):
 
 def _load_tx(get_tx_func, rawtx):
     tx = Tx.from_hex(rawtx)
+    # FIXME batch load to reduce traffic or better yet remove need altogether
     for txin in tx.txs_in:
         utxo_tx = Tx.from_hex(get_tx_func(b2h_rev(txin.previous_hash)))
         tx.unspents.append(utxo_tx.txs_out[txin.previous_index])

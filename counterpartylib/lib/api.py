@@ -810,7 +810,8 @@ class APIServer(threading.Thread):
                                                 revoke_secret_hash, netcode)
 
         @dispatcher.add_method
-        def mpc_create_commit(state, quantity, revoke_secret_hash, delay_time):
+        def mpc_create_commit(state, quantity, revoke_secret_hash,
+                              delay_time=2):
             netcode = "XTN" if config.TESTNET else "BTC"
             fee = 10000  # FIXME fee not needed, determind by depost btc - dust
             regular_dust_size = config.DEFAULT_REGULAR_DUST_SIZE
@@ -864,6 +865,12 @@ class APIServer(threading.Thread):
             netcode = "XTN" if config.TESTNET else "BTC"
             return micropayments.deposit_expired(dispatcher, state,
                                                  clearance, netcode)
+
+        @dispatcher.add_method
+        def mpc_get_published_commit(state):
+            netcode = "XTN" if config.TESTNET else "BTC"
+            return micropayments.get_published_commit(dispatcher, state,
+                                                      netcode)
 
         ######################
         # JSON-RPC API
