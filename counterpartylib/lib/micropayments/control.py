@@ -358,7 +358,7 @@ def _recover_tx(dispatcher, asset, dest_address, script, netcode, fee,
     # create expire tx
     rawtx = _create_tx(
         dispatcher, asset, src_address, dest_address, asset_balance,
-        btc_balance - fee, fee, regular_dust_size, True
+        btc_balance - fee, fee, regular_dust_size
     )
 
     # prep for script compliance and signing
@@ -421,7 +421,7 @@ def _create_commit(dispatcher, asset, deposit_script, quantity,
     else:  # provide extra btc for future payout/revoke tx fees
         extra_btc = (fee + regular_dust_size)
     rawtx = _create_tx(dispatcher, asset, src_address, dest_address, quantity,
-                       extra_btc, fee, regular_dust_size, True)
+                       extra_btc, fee, regular_dust_size)
 
     return rawtx, commit_script
 
@@ -437,12 +437,12 @@ def _create_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
     payer_address = util.pubkey2address(payer_pubkey, netcode)
     extra_btc = util.get_fee_multaple(3)  # for change + commit + recover tx
     rawtx = _create_tx(dispatcher, asset, payer_address, dest_address,
-                       quantity, extra_btc, fee, regular_dust_size, False)
+                       quantity, extra_btc, fee, regular_dust_size)
     return rawtx, script
 
 
 def _create_tx(dispatcher, asset, source_address, dest_address, quantity,
-               extra_btc, fee, regular_dust_size, disable_utxo_locks):
+               extra_btc, fee, regular_dust_size):
     assert(extra_btc >= 0)
     rawtx = dispatcher.get("create_send")(
         source=source_address,
@@ -451,7 +451,7 @@ def _create_tx(dispatcher, asset, source_address, dest_address, quantity,
         asset=asset,
         regular_dust_size=(extra_btc or regular_dust_size),
         fee=fee,
-        disable_utxo_locks=disable_utxo_locks
+        disable_utxo_locks=True
     )
     assert(_get_quantity(dispatcher, asset, rawtx) == quantity)
     return rawtx
