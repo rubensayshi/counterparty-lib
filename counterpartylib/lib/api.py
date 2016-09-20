@@ -867,10 +867,9 @@ class APIServer(threading.Thread):
                                                  clearance, netcode)
 
         @dispatcher.add_method
-        def mpc_get_published_commit(state):
-            # FIXME rename to mpc_get_published_commits
+        def mpc_get_published_commits(state):
             netcode = "XTN" if config.TESTNET else "BTC"
-            return micropayments.get_published_commit(dispatcher, state,
+            return micropayments.get_published_commits(dispatcher, state,
                                                       netcode)
 
         ######################

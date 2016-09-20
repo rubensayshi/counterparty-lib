@@ -70,23 +70,22 @@ def is_quantity(number):
 def deposit_script(deposit_script_hex, expected_payee_pubkey,
                    expected_spend_secret_hash):
     is_hex(deposit_script_hex)
-    script_bin = util.h2b(deposit_script_hex)
 
     # is a deposit script
     reference_script = scripts.compile_deposit_script(
         "deadbeef", "deadbeef", "deadbeef", "deadbeef"
     )
-    scripts.validate(reference_script, script_bin)
+    scripts.validate(reference_script, deposit_script_hex)
 
     # deposit spend secret hash matches expected spend secret hash
-    found_hash = scripts.get_deposit_spend_secret_hash(script_bin)
+    found_hash = scripts.get_deposit_spend_secret_hash(deposit_script_hex)
     if found_hash != expected_spend_secret_hash:
         raise exceptions.IncorrectSpendSecretHash(
             found_hash, expected_spend_secret_hash
         )
 
     # deposit payee pubkey matches expected payee pubkey
-    found_pubkey = scripts.get_deposit_payee_pubkey(script_bin)
+    found_pubkey = scripts.get_deposit_payee_pubkey(deposit_script_hex)
     if found_pubkey != expected_payee_pubkey:
         raise exceptions.IncorrectPubKey(found_pubkey, expected_payee_pubkey)
 
@@ -95,55 +94,55 @@ def commit_script(commit_script_hex, deposit_script_hex):
     is_hex(commit_script_hex)
     is_hex(deposit_script_hex)
 
-    _deposit_script = util.h2b(deposit_script_hex)
-    _commit_script = util.h2b(commit_script_hex)
-
     # is a deposit script
     reference_script = scripts.compile_deposit_script(
         "deadbeef", "deadbeef", "deadbeef", "deadbeef"
     )
-    scripts.validate(reference_script, _deposit_script)
+    scripts.validate(reference_script, deposit_script_hex)
 
     # is a commit script
     reference_script = scripts.compile_commit_script(
         "deadbeef", "deadbeef", "deadbeef", "deadbeef", "deadbeef"
     )
-    scripts.validate(reference_script, _commit_script)
+    scripts.validate(reference_script, commit_script_hex)
 
     # validate payee pubkey
-    deposit_payee_pubkey = scripts.get_deposit_payee_pubkey(_deposit_script)
-    commit_payee_pubkey = scripts.get_commit_payee_pubkey(_commit_script)
+    deposit_payee_pubkey = scripts.get_deposit_payee_pubkey(deposit_script_hex)
+    commit_payee_pubkey = scripts.get_commit_payee_pubkey(commit_script_hex)
     if deposit_payee_pubkey != commit_payee_pubkey:
         raise exceptions.IncorrectPubKey(commit_payee_pubkey,
                                          deposit_payee_pubkey)
 
     # validate payer pubkey
-    deposit_payer_pubkey = scripts.get_deposit_payer_pubkey(_deposit_script)
-    commit_payer_pubkey = scripts.get_commit_payer_pubkey(_commit_script)
+    deposit_payer_pubkey = scripts.get_deposit_payer_pubkey(deposit_script_hex)
+    commit_payer_pubkey = scripts.get_commit_payer_pubkey(commit_script_hex)
     if deposit_payer_pubkey != commit_payer_pubkey:
         raise exceptions.IncorrectPubKey(commit_payer_pubkey,
                                          deposit_payer_pubkey)
 
     # validate spend secret hash
-    deposit_spend_hash = scripts.get_deposit_spend_secret_hash(_deposit_script)
-    commit_spend_hash = scripts.get_commit_spend_secret_hash(_commit_script)
+    deposit_spend_hash = scripts.get_deposit_spend_secret_hash(
+        deposit_script_hex
+    )
+    commit_spend_hash = scripts.get_commit_spend_secret_hash(commit_script_hex)
     if deposit_spend_hash != commit_spend_hash:
         raise exceptions.IncorrectSpendSecretHash(commit_spend_hash,
                                                   deposit_spend_hash)
 
 
-def commit_rawtx(deposit_utxos, commit_rawtx_hex, expected_asset,
-                 expected_deposit_script_hex, expected_commit_script, netcode):
+def commit_rawtx(deposit_utxos, commit_rawtx_hex,
+                 expected_asset, expected_deposit_script_hex,
+                 expected_commit_script_hex, netcode):
 
     # is a bitcoin transaction
     tx = Tx.from_hex(commit_rawtx_hex)
 
     # validate sends to commit script
     commit_address = util.script2address(
-        util.h2b(expected_commit_script), netcode=netcode
+        expected_commit_script_hex, netcode=netcode
     )
     deposit_address = util.script2address(
-        util.h2b(expected_deposit_script_hex), netcode=netcode
+        expected_deposit_script_hex, netcode=netcode
     )
     allowed_outputs = [commit_address, deposit_address]
 
@@ -170,7 +169,7 @@ def commit_rawtx(deposit_utxos, commit_rawtx_hex, expected_asset,
         ref_scriptsig = scripts.compile_commit_scriptsig(
             "deadbeef", "deadbeef", expected_deposit_script_hex
         )
-        scripts.validate(ref_scriptsig, txin.script)
+        scripts.validate(ref_scriptsig, util.b2h(txin.script))
 
         # FIXME validate signed by payer
 

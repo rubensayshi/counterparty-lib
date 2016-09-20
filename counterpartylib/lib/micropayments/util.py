@@ -41,6 +41,11 @@ def wif2privkey(wif):
     return to_bytes_32(secret_exp)
 
 
+def wif2netcode(wif):
+    key = Key.from_text(wif)
+    return key.netcode()
+
+
 def decode_pubkey(pubkey):
     """Decode compressed hex pubkey."""
     compressed_pubkey = h2b(pubkey)
@@ -58,8 +63,10 @@ def sec2address(sec, netcode="BTC"):
     return pycoin.encoding.hash160_sec_to_bitcoin_address(digest, prefix)
 
 
-def script2address(script, netcode="BTC"):
-    return pycoin.tx.pay_to.address_for_pay_to_script(script, netcode=netcode)
+def script2address(script_hex, netcode="BTC"):
+    return pycoin.tx.pay_to.address_for_pay_to_script(
+        h2b(script_hex), netcode=netcode
+    )
 
 
 def hash160hex(hexdata):

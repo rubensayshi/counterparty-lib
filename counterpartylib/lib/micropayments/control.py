@@ -34,15 +34,15 @@ INITIAL_STATE = {
 }
 
 
-def get_published_commit(dispatcher, state, netcode):
-    deposit_script = util.h2b(state["deposit_script"])
+def get_published_commits(dispatcher, state, netcode):
+    deposit_script = state["deposit_script"]
     deposit_address = util.script2address(deposit_script, netcode)
     deposit_transactions = dispatcher.get("search_raw_transactions")(
         address=deposit_address, unconfirmed=True
     )
     deposit_txids = [tx["txid"] for tx in deposit_transactions]
     commits = state["commits_active"] + state["commits_revoked"]
-    for commit_script in [util.h2b(commit["script"]) for commit in commits]:
+    for commit_script in [commit["script"] for commit in commits]:
         commit_address = util.script2address(commit_script, netcode)
         commit_transactions = dispatcher.get("search_raw_transactions")(
             address=commit_address, unconfirmed=True
@@ -71,7 +71,7 @@ def make_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
     # setup initial state
     state = copy.deepcopy(INITIAL_STATE)
     state["asset"] = asset
-    state["deposit_script"] = util.b2h(script)
+    state["deposit_script"] = script
 
     return {
         "state": state,
@@ -126,7 +126,7 @@ def create_commit(dispatcher, state, quantity, revoke_secret_hash,
     _validate_transfer_quantity(dispatcher, state, quantity, netcode)
 
     # create deposit script and rawtx
-    deposit_script = util.h2b(state["deposit_script"])
+    deposit_script = state["deposit_script"]
     rawtx, commit_script = _create_commit(
         dispatcher, state["asset"], deposit_script, quantity,
         revoke_secret_hash, delay_time, netcode, fee, regular_dust_size
@@ -135,12 +135,12 @@ def create_commit(dispatcher, state, quantity, revoke_secret_hash,
     # update state
     _order_active(dispatcher, state)
     state["commits_active"].append({
-        "rawtx": rawtx, "script": util.b2h(commit_script)
+        "rawtx": rawtx, "script": commit_script
     })
 
     return {
         "state": state,
-        "commit_script": util.b2h(commit_script),
+        "commit_script": commit_script,
         "tosign": {
             "commit_rawtx": rawtx,
             "deposit_script": state["deposit_script"]
@@ -154,14 +154,14 @@ def add_commit(dispatcher, state, commit_rawtx, commit_script, netcode):
     validate.state(state)
     validate.commit_script(commit_script, state["deposit_script"])
     deposit_address = util.script2address(
-        util.h2b(state["deposit_script"]), netcode=netcode
+        state["deposit_script"], netcode=netcode
     )
     deposit_utxos = dispatcher.get("get_unspent_txouts")(deposit_address)
     validate.commit_rawtx(deposit_utxos, commit_rawtx, state["asset"],
                           state["deposit_script"], commit_script, netcode)
 
     # update state
-    script = util.h2b(commit_script)
+    script = commit_script
     script_revoke_secret_hash = scripts.get_commit_revoke_secret_hash(script)
     for revoke_secret_hash in state["commits_requested"][:]:
 
@@ -187,7 +187,7 @@ def revoke_hashes_until(dispatcher, state, quantity, surpass):
 
     # validate input
     validate.state(state)
-    validate.is_quantity(quantity)
+    validate.is_unsigned(quantity)
 
     # get revoke secret hashes
     revoke_secret_hashes = []
@@ -199,7 +199,7 @@ def revoke_hashes_until(dispatcher, state, quantity, surpass):
         commit_quantity = _get_quantity(dispatcher, asset, rawtx)
         exact_match = quantity == commit_quantity
         if quantity < commit_quantity:
-            script = util.h2b(commit["script"])
+            script = commit["script"]
             secret_hash = scripts.get_commit_revoke_secret_hash(script)
             revoke_secret_hashes.append(secret_hash)
         else:
@@ -260,7 +260,7 @@ def payouts(dispatcher, state, netcode, fee, regular_dust_size):
     payouts = []
     recoverable_scripts = _get_payout_recoverable(dispatcher, state, netcode)
     if len(recoverable_scripts) > 0:
-        deposit_script = util.h2b(state["deposit_script"])
+        deposit_script = state["deposit_script"]
         payee_pubkey = scripts.get_deposit_payee_pubkey(deposit_script)
         for script in recoverable_scripts:
             rawtx = _create_recover_commit(
@@ -268,7 +268,7 @@ def payouts(dispatcher, state, netcode, fee, regular_dust_size):
                 netcode, fee, regular_dust_size
             )
             payouts.append({
-                "payout_rawtx": rawtx, "commit_script": util.b2h(script)
+                "payout_rawtx": rawtx, "commit_script": script
             })
     return payouts
 
@@ -278,7 +278,7 @@ def recoverables(dispatcher, state, netcode, fee, regular_dust_size):
     # validate input
     validate.state(state)
 
-    deposit_script = util.h2b(state["deposit_script"])
+    deposit_script = state["deposit_script"]
     payer_pubkey = scripts.get_deposit_payer_pubkey(deposit_script)
     recoverables = {"revoke": [], "change": [], "expire": []}
 
@@ -292,7 +292,7 @@ def recoverables(dispatcher, state, netcode, fee, regular_dust_size):
             )
             recoverables["revoke"].append({
                 "revoke_rawtx": rawtx,
-                "commit_script": util.b2h(script),
+                "commit_script": script,
                 "revoke_secret": secret
             })
 
@@ -500,7 +500,7 @@ def _get_quantity(dispatcher, expected_asset, rawtx):
 
 
 def _validate_transfer_quantity(dispatcher, state, quantity, netcode):
-    script = util.h2b(state["deposit_script"])
+    script = state["deposit_script"]
     confirms, asset_balance, btc_balance = _deposit_status(
         dispatcher, state["asset"], script, netcode
     )
@@ -519,7 +519,7 @@ def _order_active(dispatcher, state):
 def _revoke(state, secret):
     secret_hash = util.hash160hex(secret)
     for commit in state["commits_active"][:]:
-        script = util.h2b(commit["script"])
+        script = commit["script"]
         if secret_hash == scripts.get_commit_revoke_secret_hash(script):
             state["commits_active"].remove(commit)
             commit["revoke_secret"] = secret  # save secret
@@ -530,7 +530,7 @@ def _revoke(state, secret):
 def _get_payout_recoverable(dispatcher, state, netcode):
     _scripts = []
     for commit in (state["commits_active"] + state["commits_revoked"]):
-        script = util.h2b(commit["script"])
+        script = commit["script"]
         delay_time = scripts.get_commit_delay_time(script)
         address = util.script2address(script, netcode=netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
@@ -554,7 +554,7 @@ def _can_expire_recover(dispatcher, state, netcode):
 
 
 def _can_deposit_spend(dispatcher, state, netcode):
-    script = util.h2b(state["deposit_script"])
+    script = state["deposit_script"]
     address = util.script2address(script, netcode)
     return _can_spend_from_address(dispatcher, state["asset"], address)
 
@@ -562,7 +562,7 @@ def _can_deposit_spend(dispatcher, state, netcode):
 def deposit_expired(dispatcher, state, clearance, netcode):
     validate.is_unsigned(clearance)
     validate.state(state)
-    script = util.h2b(state["deposit_script"])
+    script = state["deposit_script"]
     t = scripts.get_deposit_expire_time(script)
     confirms, asset_balance, btc_balance = _deposit_status(
         dispatcher, state["asset"], script, netcode
@@ -600,7 +600,7 @@ def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
 
 def _find_spend_secret(dispatcher, state, netcode):
     for commit in state["commits_active"] + state["commits_revoked"]:
-        script = util.h2b(commit["script"])
+        script = commit["script"]
         address = util.script2address(
             script, netcode=netcode
         )
@@ -618,7 +618,7 @@ def _find_spend_secret(dispatcher, state, netcode):
 def _get_revoke_recoverable(dispatcher, state, netcode):
     revokable = []  # (script, secret)
     for commit in state["commits_revoked"]:
-        script = util.h2b(commit["script"])
+        script = commit["script"]
         address = util.script2address(script, netcode=netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
             revokable.append((script, commit["revoke_secret"]))
