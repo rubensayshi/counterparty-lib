@@ -70,12 +70,7 @@ def is_quantity(number):
 def deposit_script(deposit_script_hex, expected_payee_pubkey,
                    expected_spend_secret_hash):
     is_hex(deposit_script_hex)
-
-    # is a deposit script
-    reference_script = scripts.compile_deposit_script(
-        "deadbeef", "deadbeef", "deadbeef", "deadbeef"
-    )
-    scripts.validate(reference_script, deposit_script_hex)
+    scripts.validate_deposit_script(deposit_script_hex)
 
     # deposit spend secret hash matches expected spend secret hash
     found_hash = scripts.get_deposit_spend_secret_hash(deposit_script_hex)
@@ -94,17 +89,8 @@ def commit_script(commit_script_hex, deposit_script_hex):
     is_hex(commit_script_hex)
     is_hex(deposit_script_hex)
 
-    # is a deposit script
-    reference_script = scripts.compile_deposit_script(
-        "deadbeef", "deadbeef", "deadbeef", "deadbeef"
-    )
-    scripts.validate(reference_script, deposit_script_hex)
-
-    # is a commit script
-    reference_script = scripts.compile_commit_script(
-        "deadbeef", "deadbeef", "deadbeef", "deadbeef", "deadbeef"
-    )
-    scripts.validate(reference_script, commit_script_hex)
+    scripts.validate_deposit_script(deposit_script_hex)
+    scripts.validate_commit_script(commit_script_hex)
 
     # validate payee pubkey
     deposit_payee_pubkey = scripts.get_deposit_payee_pubkey(deposit_script_hex)

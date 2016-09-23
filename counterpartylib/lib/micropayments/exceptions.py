@@ -103,13 +103,6 @@ class InvalidState(Exception):
         super(InvalidState, self).__init__(msg.format(x))
 
 
-class InvalidScript(Exception):
-
-    def __init__(self, x):
-        msg = "Invalid script: '{0}'"
-        super(InvalidScript, self).__init__(msg.format(x))
-
-
 class IncorrectPubKey(Exception):
 
     def __init__(self, found, expected):
