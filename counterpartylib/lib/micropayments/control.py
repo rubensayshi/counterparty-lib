@@ -590,12 +590,14 @@ def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
 
     # check asset balance
     if asset_balance < quantity:
-        raise exceptions.InsufficientFunds(quantity, asset_balance)
+        raise exceptions.InsufficientFunds(quantity, asset_balance,
+                                           address, asset)
 
     # check btc balance
     extra_btc = (fee + regular_dust_size) * 3
     if btc_balance < extra_btc:
-        raise exceptions.InsufficientFunds(extra_btc, btc_balance)
+        raise exceptions.InsufficientFunds(extra_btc, btc_balance,
+                                           address, "BTC")
 
 
 def _find_spend_secret(dispatcher, state, netcode):

@@ -14,9 +14,11 @@ class ChannelAlreadyUsed(Exception):
 
 class InsufficientFunds(Exception):
 
-    def __init__(self, needed, available):
-        msg = "Needed funds '{0}', available '{1}'"
-        super(InsufficientFunds, self).__init__(msg.format(needed, available))
+    def __init__(self, needed, available, address, asset):
+        msg = "Needed funds '{0}', available '{1}' for {2}@{3}"
+        super(InsufficientFunds, self).__init__(
+            msg.format(needed, available, asset, address)
+        )
 
 
 class InvalidWif(Exception):

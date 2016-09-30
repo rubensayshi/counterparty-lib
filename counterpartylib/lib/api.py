@@ -788,7 +788,8 @@ class APIServer(threading.Thread):
         def mpc_make_deposit(asset, payer_pubkey, payee_pubkey,
                              spend_secret_hash, expire_time, quantity):
             netcode = "XTN" if config.TESTNET else "BTC"
-            fee = 10000  # FIXME use fee_per_kb instead?
+            fee = 10000  # FIXME use fee_per_kb instead!
+            # FIXME add fee_per_kb to args
             regular_dust_size = config.DEFAULT_REGULAR_DUST_SIZE
             return micropayments.make_deposit(
                 dispatcher, asset, payer_pubkey, payee_pubkey,
@@ -870,7 +871,7 @@ class APIServer(threading.Thread):
         def mpc_get_published_commits(state):
             netcode = "XTN" if config.TESTNET else "BTC"
             return micropayments.get_published_commits(dispatcher, state,
-                                                      netcode)
+                                                       netcode)
 
         ######################
         # JSON-RPC API
