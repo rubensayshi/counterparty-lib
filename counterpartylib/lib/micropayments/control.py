@@ -546,7 +546,7 @@ def _can_expire_recover(dispatcher, state, netcode):
         state["deposit_script"] is not None and
 
         # deposit expired
-        deposit_expired(dispatcher, state, 0, netcode) and
+        deposit_ttl(dispatcher, state, 0, netcode) == 0 and
 
         # funds to recover
         _can_deposit_spend(dispatcher, state, netcode)
@@ -559,7 +559,7 @@ def _can_deposit_spend(dispatcher, state, netcode):
     return _can_spend_from_address(dispatcher, state["asset"], address)
 
 
-def deposit_expired(dispatcher, state, clearance, netcode):
+def deposit_ttl(dispatcher, state, clearance, netcode):
     validate.is_unsigned(clearance)
     validate.state(state)
     script = state["deposit_script"]
@@ -567,7 +567,9 @@ def deposit_expired(dispatcher, state, clearance, netcode):
     confirms, asset_balance, btc_balance = _deposit_status(
         dispatcher, state["asset"], script, netcode
     )
-    return (confirms + clearance) >= t
+    if confirms == 0 and asset_balance == 0 and btc_balance == 0:
+        return None  # no deposit made yet
+    return max(t - (confirms + clearance), 0)
 
 
 def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,

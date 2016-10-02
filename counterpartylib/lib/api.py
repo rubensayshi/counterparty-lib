@@ -862,10 +862,11 @@ class APIServer(threading.Thread):
                                               fee, regular_dust_size)
 
         @dispatcher.add_method
-        def mpc_deposit_expired(state, clearance=0):
+        def mpc_deposit_ttl(state, clearance=0):
+            # FIXME change to return commits_until_expired
             netcode = "XTN" if config.TESTNET else "BTC"
-            return micropayments.deposit_expired(dispatcher, state,
-                                                 clearance, netcode)
+            return micropayments.deposit_ttl(dispatcher, state,
+                                             clearance, netcode)
 
         @dispatcher.add_method
         def mpc_get_published_commits(state):

@@ -14,6 +14,6 @@ from .control import highest_commit  # NOQA
 from .control import transferred_amount  # NOQA
 from .control import payouts  # NOQA
 from .control import recoverables  # NOQA
-from .control import deposit_expired  # NOQA
+from .control import deposit_ttl  # NOQA
 from .control import get_published_commits  # NOQA
 from . import util  # NOQA
