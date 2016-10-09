@@ -115,7 +115,7 @@ def initialise_config(database_file=None, log_file=None, api_log_file=None,
     else:
         config.TESTCOIN = False
 
-    bitcoinlib.SelectParams('testnet' if config.TESTNET else 'bitcoin')
+    bitcoinlib.SelectParams('testnet' if config.TESTNET else 'mainnet')
 
     network = ''
     if config.TESTNET:

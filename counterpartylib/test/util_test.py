@@ -276,17 +276,18 @@ def prefill_rawtransactions_db(db):
     with open(CURR_DIR + '/fixtures/unspent_outputs.json', 'r') as listunspent_test_file:
             wallet_unspent = json.load(listunspent_test_file)
             for output in wallet_unspent:
-                txid = binascii.hexlify(bitcoinlib.core.lx(output['txid'])).decode()
+                txid = output['txid']
                 tx = backend.deserialize(output['txhex'])
                 cursor.execute('INSERT INTO raw_transactions VALUES (?, ?, ?)', (txid, output['txhex'], output['confirmations']))
     cursor.close()
 
 
-def save_rawtransaction(db, tx_hash, tx_hex, confirmations=0):
+def save_rawtransaction(db, txid, tx_hex, confirmations=0):
     """Insert the raw transaction into the db."""
     cursor = db.cursor()
     try:
-        txid = binascii.hexlify(bitcoinlib.core.lx(tx_hash)).decode()
+        if isinstance(txid, bytes):
+            txid = binascii.hexlify(txid).decode('ascii')
         cursor.execute('''INSERT INTO raw_transactions VALUES (?, ?, ?)''', (txid, tx_hex, confirmations))
     except Exception as e: # TODO
         pass
@@ -302,55 +303,99 @@ def getrawtransaction(db, txid, verbose=False):
     """
     cursor = db.cursor()
 
+    print('getraw1', txid)
+
     if isinstance(txid, bytes):
-        txid = binascii.hexlify(txid).decode()
+        txid = binascii.hexlify(txid).decode('ascii')
+
+    print('getraw2', txid)
 
     tx_hex, confirmations = list(cursor.execute('''SELECT tx_hex, confirmations FROM raw_transactions WHERE tx_hash = ?''', (txid,)))[0]
     cursor.close()
 
     if verbose:
-        ctx = bitcoinlib.core.CTransaction.deserialize(binascii.unhexlify(tx_hex))
-
-        result = {
-            'txid': bitcoinlib.core.b2lx(ctx.GetHash()),
-            'confirmations': confirmations,
-            'vin': [],
-            'vout': [],
-        }
-
-        for vin in ctx.vin:
-            pass
-
-        for vout in ctx.vout:
-            if list(vout.scriptPubKey)[-1] == bitcoinlib.core.script.OP_CHECKMULTISIG:
-               pubkeys = list(vout.scriptPubKey)[1:-2]
-               addresses = []
-               for pubkey in pubkeys:
-                   addr = str(bitcoinlib.wallet.P2PKHBitcoinAddress.from_pubkey(pubkey))
-
-                   addresses.append(addr)
-            else:
-                try:
-                    addresses = [str(bitcoinlib.wallet.CBitcoinAddress.from_scriptPubKey(vout.scriptPubKey))]
-                except bitcoinlib.wallet.CBitcoinAddressError:
-                    addresses = []
-
-
-            rvout = {
-                'value': vout.nValue / config.UNIT,
-                'scriptPubKey': {
-                    'addresses': addresses,
-                    'hex': binascii.hexlify(vout.scriptPubKey),
-                    'asm': " ".join(map(str, list(vout.scriptPubKey))),
-                }
-            }
-
-            result['vout'].append(rvout)
-
-        return result
-
+        return mock_bitcoind_verbose_tx_output(tx_hex, txid, confirmations)
     else:
         return tx_hex
+
+
+def mock_bitcoind_verbose_tx_output(tx, txid, confirmations):
+    if isinstance(tx, bitcoinlib.core.CTransaction):
+        ctx = tx
+    else:
+        if not isinstance(tx, bytes):
+            tx = binascii.unhexlify(tx)
+        ctx = bitcoinlib.core.CTransaction.deserialize(tx)
+
+    result = {
+        'version': ctx.nVersion,
+        'locktime': ctx.nLockTime,
+        'txid': txid,  # bitcoinlib.core.b2lx(ctx.GetHash()),
+        'hex': binascii.hexlify(ctx.serialize()).decode('ascii'),
+        'size': len(ctx.serialize()),
+        'confirmations': confirmations,
+        'vin': [],
+        'vout': [],
+
+        # not mocked yet
+        'time': None,
+        'blockhash': None,
+        'blocktime': None,
+    }
+
+    for vin in ctx.vin:
+        asm = list(map(lambda op: binascii.hexlify(op).decode('ascii') if isinstance(op, bytes) else str(op), list(vin.scriptSig)))
+        rvin = {
+            'txid': bitcoinlib.core.b2lx(vin.prevout.hash),
+            'vout': vin.prevout.n,
+            'scriptSig': {
+                'hex': binascii.hexlify(vin.scriptSig).decode('ascii'),
+                'asm': " ".join(asm),
+            },
+            'sequence': vin.nSequence
+        }
+
+        # result['vin'].append(rvin)
+
+    for idx, vout in enumerate(ctx.vout):
+        if list(vout.scriptPubKey)[-1] == bitcoinlib.core.script.OP_CHECKMULTISIG:
+           pubkeys = list(vout.scriptPubKey)[1:-2]
+           addresses = []
+           for pubkey in pubkeys:
+               addr = str(bitcoinlib.wallet.P2PKHBitcoinAddress.from_pubkey(pubkey))
+
+               addresses.append(addr)
+        else:
+            try:
+                addresses = [str(bitcoinlib.wallet.CBitcoinAddress.from_scriptPubKey(vout.scriptPubKey))]
+            except bitcoinlib.wallet.CBitcoinAddressError:
+                addresses = []
+
+        asm = list(map(lambda op: binascii.hexlify(op).decode('ascii') if isinstance(op, bytes) else str(op), list(vout.scriptPubKey)))
+
+        type = 'unknown'
+        if vout.scriptPubKey[-1] == bitcoinlib.core.script.OP_CHECKMULTISIG:
+            type = 'multisig'
+        elif len(list(vout.scriptPubKey)) == 5 and \
+                        vout.scriptPubKey[1] == bitcoinlib.core.script.OP_HASH160 and \
+                        vout.scriptPubKey[-2] == bitcoinlib.core.script.OP_EQUALVERIFY and \
+                        vout.scriptPubKey[-1] == bitcoinlib.core.script.OP_CHECKSIG:
+            type = 'pubkeyhash'
+
+        rvout = {
+            'n': idx,
+            'value': vout.nValue / config.UNIT,
+            'scriptPubKey': {
+                'type': type,
+                'addresses': addresses,
+                'hex': binascii.hexlify(vout.scriptPubKey).decode('ascii'),
+                'asm': " ".join(asm),
+            }
+        }
+
+        result['vout'].append(rvout)
+
+    return result
 
 
 def getrawtransaction_batch(db, txhash_list, verbose=False):
@@ -366,6 +411,8 @@ def searchrawtransactions(db, address, unconfirmed=False):
 
     try:
         all_tx_hashes = list(map(lambda r: r[0], cursor.execute('''SELECT tx_hash FROM raw_transactions WHERE confirmations >= ?''', (0 if unconfirmed else 1, ))))
+
+        print('026e483852adf712d8e6b5fd5239debb76e3201ab6fff6eaa3d13c412bd5a08c' in all_tx_hashes)
 
         tx_hashes_tx = getrawtransaction_batch(db, all_tx_hashes, verbose=True)
 
@@ -388,8 +435,10 @@ def searchrawtransactions(db, address, unconfirmed=False):
 
         tx_hashes = tx_map.get(address, set())
 
+        pprint.pprint(tx_hashes)
+
         if len(tx_hashes):
-            return getrawtransaction_batch(db, tx_hashes)
+            return sorted(getrawtransaction_batch(db, tx_hashes, verbose=True).values(), key=lambda tx: (tx['confirmations'], tx['txid']))
         else:
             return []
     finally:
