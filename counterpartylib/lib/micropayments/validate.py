@@ -163,4 +163,12 @@ def commit_rawtx(deposit_utxos, commit_rawtx_hex,
 
 
 def state(state_data):
-    pass  # FIXME implement
+    # FIXME add json schema
+    # FIXME add content validation
+
+    import pudb;pu.db
+    # commits scripts must be a set
+    active_scripts = [c["script"] for c in state_data["commits_active"]]
+    assert(len(state_data["commits_active"]) == len(active_scripts))
+    revoked_scripts = [c["script"] for c in state_data["commits_revoked"]]
+    assert(len(state_data["commits_revoked"]) == len(revoked_scripts))
