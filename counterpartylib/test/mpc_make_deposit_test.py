@@ -1,9 +1,11 @@
+import json
 import tempfile
 import pytest
 # this is require near the top to do setup of the test suite
 # from counterpartylib.test import conftest
 
 # from counterpartylib.test import util_test
+from counterpartylib.lib import util
 from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
 from counterpartylib.lib.micropayments.util import hash160hex
@@ -46,30 +48,29 @@ EXPECTED_STANDARD_USAGE_XCP = {
     "topublish": (
         "0100000001c1d8c075936c3495f6d653c50f73d987f75448d97a750249b1eb83bee"
         "71b24ae000000001976a9144838d8b3588c4c7ba7c1d06f866e9b3739c6303788ac"
-        "ffffffff03d2b400000000000017a91459ba717d7d8b1d7a76fb375b0eeac132422"
+        "ffffffff031ed200000000000017a91459ba717d7d8b1d7a76fb375b0eeac132422"
         "5f0b88700000000000000001e6a1c8a5dda15fb6f05628a061e67576e926dc71a7f"
-        "a2f0cceb97452b4d183283e90b000000001976a9144838d8b3588c4c7ba7c1d06f8"
+        "a2f0cceb97452b4d18e665e90b000000001976a9144838d8b3588c4c7ba7c1d06f8"
         "66e9b3739c6303788ac00000000"
     )
 }
 
 
-# FIXME fix test or code
-# @pytest.mark.usefixtures("server_db")
-# @pytest.mark.usefixtures("api_server")
-# def test_standard_usage_xcp(server_db):
-#     result = util.api(
-#         method="mpc_make_deposit",
-#         params={
-#             "asset": "XCP",
-#             "payer_pubkey": ALICE_PUBKEY,
-#             "payee_pubkey": BOB_PUBKEY,
-#             "spend_secret_hash": SPEND_SECRET_HASH,
-#             "expire_time": 1337,  # in blocks
-#             "quantity": 42  # in satoshis
-#         }
-#     )
-#     assert result == EXPECTED_STANDARD_USAGE_XCP
+@pytest.mark.usefixtures("server_db")
+@pytest.mark.usefixtures("api_server")
+def test_standard_usage_xcp(server_db):
+    result = util.api(
+        method="mpc_make_deposit",
+        params={
+            "asset": "XCP",
+            "payer_pubkey": ALICE_PUBKEY,
+            "payee_pubkey": BOB_PUBKEY,
+            "spend_secret_hash": SPEND_SECRET_HASH,
+            "expire_time": 1337,  # in blocks
+            "quantity": 42  # in satoshis
+        }
+    )
+    assert result == EXPECTED_STANDARD_USAGE_XCP
 
 
 @pytest.mark.usefixtures("server_db")

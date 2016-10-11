@@ -166,9 +166,8 @@ def state(state_data):
     # FIXME add json schema
     # FIXME add content validation
 
-    import pudb;pu.db
     # commits scripts must be a set
     active_scripts = [c["script"] for c in state_data["commits_active"]]
-    assert(len(state_data["commits_active"]) == len(active_scripts))
+    assert(len(state_data["commits_active"]) == len(set(active_scripts)))
     revoked_scripts = [c["script"] for c in state_data["commits_revoked"]]
-    assert(len(state_data["commits_revoked"]) == len(revoked_scripts))
+    assert(len(state_data["commits_revoked"]) == len(set(revoked_scripts)))

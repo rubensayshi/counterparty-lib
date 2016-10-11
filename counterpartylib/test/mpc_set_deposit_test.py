@@ -9,7 +9,6 @@ from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
 from counterpartylib.lib import util
 from counterpartylib.lib.micropayments.util import wif2address
-from counterpartylib.lib.micropayments.util import b2h
 from counterpartylib.lib.micropayments.util import wif2pubkey
 from counterpartylib.lib.micropayments.util import random_wif
 from counterpartylib.lib.micropayments.scripts import compile_deposit_script
@@ -34,25 +33,24 @@ DEPOSIT_SCRIPT = compile_deposit_script(
 DEPOSIT_ADDRESS = script2address(DEPOSIT_SCRIPT, "XTN")
 
 
-# FIXME fix test or code
-# @pytest.mark.usefixtures("server_db")
-# @pytest.mark.usefixtures("api_server")
-# def test_standard_usage_xcp(server_db):
-#
-#     state = util.api("mpc_set_deposit", {
-#         "asset": ASSET,
-#         "deposit_script": b2h(DEPOSIT_SCRIPT),
-#         "expected_payee_pubkey": BOB_PUBKEY,
-#         "expected_spend_secret_hash": SPEND_SECRET_HASH
-#     })
-#
-#     assert state == {
-#         "asset": ASSET,
-#         'deposit_script': b2h(DEPOSIT_SCRIPT),
-#         'commits_active': [],
-#         'commits_requested': [],
-#         'commits_revoked': []
-#     }
+@pytest.mark.usefixtures("server_db")
+@pytest.mark.usefixtures("api_server")
+def test_standard_usage_xcp(server_db):
+
+    state = util.api("mpc_set_deposit", {
+        "asset": ASSET,
+        "deposit_script": DEPOSIT_SCRIPT,
+        "expected_payee_pubkey": BOB_PUBKEY,
+        "expected_spend_secret_hash": SPEND_SECRET_HASH
+    })
+
+    assert state == {
+        "asset": ASSET,
+        'deposit_script': DEPOSIT_SCRIPT,
+        'commits_active': [],
+        'commits_requested': [],
+        'commits_revoked': []
+    }
 
 
 @pytest.mark.usefixtures("server_db")
