@@ -381,7 +381,8 @@ class APIStatusPoller(threading.Thread):
 
 class APIServer(threading.Thread):
     """Handle JSON-RPC API calls."""
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self.is_ready = False
         threading.Thread.__init__(self)
         self.stop_event = threading.Event()
@@ -392,7 +393,7 @@ class APIServer(threading.Thread):
 
     def run(self):
         logger.info('Starting API Server.')
-        db = database.get_connection(read_only=True, integrity_check=False)
+        self.db = self.db or database.get_connection(read_only=True, integrity_check=False)
         app = flask.Flask(__name__)
         auth = HTTPBasicAuth()
 
@@ -409,7 +410,7 @@ class APIServer(threading.Thread):
         def generate_get_method(table):
             def get_method(**kwargs):
                 try:
-                    return get_rows(db, table=table, **kwargs)
+                    return get_rows(self.db, table=table, **kwargs)
                 except TypeError as e:          #TODO: generalise for all API methods
                     raise APIError(str(e))
             return get_method
@@ -423,7 +424,7 @@ class APIServer(threading.Thread):
         def sql(query, bindings=None):
             if bindings == None:
                 bindings = []
-            return db_query(db, query, tuple(bindings))
+            return db_query(self.db, query, tuple(bindings))
 
 
         ######################
@@ -448,7 +449,7 @@ class APIServer(threading.Thread):
             def create_method(**kwargs):
                 try:
                     transaction_args, common_args, private_key_wif = split_params(**kwargs)
-                    return compose_transaction(db, name=tx, params=transaction_args, **common_args)
+                    return compose_transaction(self.db, name=tx, params=transaction_args, **common_args)
                 except TypeError as e:
                     raise APIError(str(e))
                 except (script.AddressError, exceptions.ComposeError, exceptions.TransactionError, exceptions.BalanceError) as error:
@@ -468,7 +469,7 @@ class APIServer(threading.Thread):
             if not isinstance(block_index, int):
                 raise APIError("block_index must be an integer.")
 
-            cursor = db.cursor()
+            cursor = self.db.cursor()
             cursor.execute('select * from messages where block_index = ? order by message_index asc', (block_index,))
             messages = cursor.fetchall()
             cursor.close()
@@ -486,7 +487,7 @@ class APIServer(threading.Thread):
                 if not isinstance(idx, int):
                     raise APIError("All items in message_indexes are not integers")
 
-            cursor = db.cursor()
+            cursor = self.db.cursor()
             cursor.execute('SELECT * FROM messages WHERE message_index IN (%s) ORDER BY message_index ASC'
                 % (','.join([str(x) for x in message_indexes]),))
             messages = cursor.fetchall()
@@ -498,14 +499,14 @@ class APIServer(threading.Thread):
             if asset == 'BTC':
                 return  backend.get_btc_supply(normalize=False)
             elif asset == 'XCP':
-                return util.xcp_supply(db)
+                return util.xcp_supply(self.db)
             else:
-                return util.asset_supply(db, asset)
+                return util.asset_supply(self.db, asset)
 
         @dispatcher.add_method
         def get_xcp_supply():
             logger.warning("Deprecated method: `get_xcp_supply`")
-            return util.xcp_supply(db)
+            return util.xcp_supply(self.db)
 
         @dispatcher.add_method
         def get_asset_info(assets):
@@ -520,7 +521,7 @@ class APIServer(threading.Thread):
                     if asset == config.BTC:
                         supply = backend.get_btc_supply(normalize=False)
                     else:
-                        supply = util.xcp_supply(db)
+                        supply = util.xcp_supply(self.db)
 
                     assetsInfo.append({
                         'asset': asset,
@@ -534,7 +535,7 @@ class APIServer(threading.Thread):
                     continue
 
                 # User‐created asset.
-                cursor = db.cursor()
+                cursor = self.db.cursor()
                 issuances = list(cursor.execute('''SELECT * FROM issuances WHERE (status = ? AND asset = ?) ORDER BY block_index ASC''', ('valid', asset)))
                 cursor.close()
                 if not issuances:
@@ -549,7 +550,7 @@ class APIServer(threading.Thread):
                     'owner': last_issuance['issuer'],
                     'divisible': bool(last_issuance['divisible']),
                     'locked': locked,
-                    'supply': util.asset_supply(db, asset),
+                    'supply': util.asset_supply(self.db, asset),
                     'description': last_issuance['description'],
                     'issuer': last_issuance['issuer']})
             return assetsInfo
@@ -557,7 +558,7 @@ class APIServer(threading.Thread):
         @dispatcher.add_method
         def get_block_info(block_index):
             assert isinstance(block_index, int)
-            cursor = db.cursor()
+            cursor = self.db.cursor()
             cursor.execute('''SELECT * FROM blocks WHERE block_index = ?''', (block_index,))
             blocks = list(cursor)
             if len(blocks) == 1:
@@ -586,7 +587,7 @@ class APIServer(threading.Thread):
                 raise APIError("can only specify up to 250 indexes at a time.")
 
             block_indexes_str = ','.join([str(x) for x in block_indexes])
-            cursor = db.cursor()
+            cursor = self.db.cursor()
 
             # The blocks table gets rolled back from undolog, so min_message_index doesn't matter for this query
             cursor.execute('SELECT * FROM blocks WHERE block_index IN (%s) ORDER BY block_index ASC'
@@ -617,14 +618,14 @@ class APIServer(threading.Thread):
             latestBlockIndex = backend.getblockcount()
 
             try:
-                check_database_state(db, latestBlockIndex)
+                check_database_state(self.db, latestBlockIndex)
             except DatabaseError:
                 caught_up = False
             else:
                 caught_up = True
 
             try:
-                cursor = db.cursor()
+                cursor = self.db.cursor()
                 blocks = list(cursor.execute('''SELECT * FROM blocks WHERE block_index = ?''', (util.CURRENT_BLOCK_INDEX, )))
                 assert len(blocks) == 1
                 last_block = blocks[0]
@@ -633,7 +634,7 @@ class APIServer(threading.Thread):
                 last_block = None
 
             try:
-                last_message = util.last_message(db)
+                last_message = util.last_message(self.db)
             except:
                 last_message = None
 
@@ -652,7 +653,7 @@ class APIServer(threading.Thread):
         @dispatcher.add_method
         def get_element_counts():
             counts = {}
-            cursor = db.cursor()
+            cursor = self.db.cursor()
             for element in ['transactions', 'blocks', 'debits', 'credits', 'balances', 'sends', 'orders',
                 'order_matches', 'btcpays', 'issuances', 'broadcasts', 'bets', 'bet_matches', 'dividends',
                 'burns', 'cancels', 'order_expirations', 'bet_expirations', 'order_match_expirations',
@@ -666,14 +667,14 @@ class APIServer(threading.Thread):
 
         @dispatcher.add_method
         def get_asset_names():
-            cursor = db.cursor()
+            cursor = self.db.cursor()
             names = [row['asset'] for row in cursor.execute("SELECT DISTINCT asset FROM issuances WHERE status = 'valid' ORDER BY asset ASC")]
             cursor.close()
             return names
 
         @dispatcher.add_method
         def get_holder_count(asset):
-            holders = util.holders(db, asset)
+            holders = util.holders(self.db, asset)
             addresses = []
             for holder in holders:
                 addresses.append(holder['address'])
@@ -681,7 +682,7 @@ class APIServer(threading.Thread):
 
         @dispatcher.add_method
         def get_holders(asset):
-            holders = util.holders(db, asset)
+            holders = util.holders(self.db, asset)
             return holders
 
         @dispatcher.add_method
@@ -717,7 +718,7 @@ class APIServer(threading.Thread):
                 unpack_method = send.unpack
             else:
                 raise APIError('unsupported message type')
-            unpacked = unpack_method(db, message, util.CURRENT_BLOCK_INDEX)
+            unpacked = unpack_method(self.db, message, util.CURRENT_BLOCK_INDEX)
             return message_type_id, unpacked
 
         @dispatcher.add_method
@@ -857,7 +858,7 @@ class APIServer(threading.Thread):
 
                 # Compose the transaction.
                 try:
-                    query_data = compose_transaction(db, name=query_type, params=transaction_args, **common_args)
+                    query_data = compose_transaction(self.db, name=query_type, params=transaction_args, **common_args)
                 except (script.AddressError, exceptions.ComposeError, exceptions.TransactionError, exceptions.BalanceError) as error:
                     error_msg = logging.warning("{} -- error composing {} transaction via API: {}".format(
                         str(error.__class__.__name__), query_type, str(error)))
@@ -871,7 +872,7 @@ class APIServer(threading.Thread):
 
                 # Run the query.
                 try:
-                    query_data = get_rows(db, table=query_type, filters=data_filter, filterop=operator)
+                    query_data = get_rows(self.db, table=query_type, filters=data_filter, filterop=operator)
                 except APIError as error:
                     return flask.Response(str(error), 400, mimetype='application/json')
 
@@ -898,7 +899,7 @@ class APIServer(threading.Thread):
         self.is_ready = True
         app.run(host=config.RPC_HOST, port=config.RPC_PORT, threaded=True)
             
-        db.close()
+        self.db.close()
         return
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
