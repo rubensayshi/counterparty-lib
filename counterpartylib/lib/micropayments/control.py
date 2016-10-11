@@ -107,12 +107,7 @@ def request_commit(dispatcher, state, quantity, revoke_secret_hash, netcode):
 
     # update state
     state["commits_requested"].append(revoke_secret_hash)
-
-    return {
-        "state": state,
-        "quantity": quantity,
-        "revoke_secret_hash": revoke_secret_hash
-    }
+    return state
 
 
 def create_commit(dispatcher, state, quantity, revoke_secret_hash,
@@ -244,6 +239,9 @@ def highest_commit(dispatcher, state):
 
 def transferred_amount(dispatcher, state):
 
+    # validate input
+    validate.state(state)
+
     if len(state["commits_active"]) == 0:
         return 0
     _order_active(dispatcher, state)
@@ -268,7 +266,7 @@ def payouts(dispatcher, state, netcode, fee, regular_dust_size):
                 netcode, fee, regular_dust_size
             )
             payouts.append({
-                "payout_rawtx": rawtx, "commit_script": script
+                "payout_rawtx": rawtx, "commit_script": script,
             })
     return payouts
 

@@ -303,12 +303,8 @@ def getrawtransaction(db, txid, verbose=False):
     """
     cursor = db.cursor()
 
-    print('getraw1', txid)
-
     if isinstance(txid, bytes):
         txid = binascii.hexlify(txid).decode('ascii')
-
-    print('getraw2', txid)
 
     tx_hex, confirmations = list(cursor.execute('''SELECT tx_hex, confirmations FROM raw_transactions WHERE tx_hash = ?''', (txid,)))[0]
     cursor.close()
@@ -412,8 +408,6 @@ def searchrawtransactions(db, address, unconfirmed=False):
     try:
         all_tx_hashes = list(map(lambda r: r[0], cursor.execute('''SELECT tx_hash FROM raw_transactions WHERE confirmations >= ?''', (0 if unconfirmed else 1, ))))
 
-        print('026e483852adf712d8e6b5fd5239debb76e3201ab6fff6eaa3d13c412bd5a08c' in all_tx_hashes)
-
         tx_hashes_tx = getrawtransaction_batch(db, all_tx_hashes, verbose=True)
 
         def _getrawtransaction_batch(txhash_list, verbose=False):
@@ -434,8 +428,6 @@ def searchrawtransactions(db, address, unconfirmed=False):
                 reverse_tx_map[tx_hash].add(_address)
 
         tx_hashes = tx_map.get(address, set())
-
-        pprint.pprint(tx_hashes)
 
         if len(tx_hashes):
             return sorted(getrawtransaction_batch(db, tx_hashes, verbose=True).values(), key=lambda tx: (tx['confirmations'], tx['txid']))

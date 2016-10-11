@@ -19,6 +19,7 @@ from Crypto.Cipher import ARC4
 logger = logging.getLogger()
 
 from counterpartylib.lib import log
+from counterpartylib import server
 log.set_logger(logger)
 
 from counterpartylib.test import util_test
@@ -28,6 +29,8 @@ from counterpartylib.test.fixtures.scenarios import INTEGRATION_SCENARIOS
 
 from counterpartylib.lib import config, util, database, api, script, arc4
 
+# used to increment RPC port between test modules to avoid conflicts
+TEST_RPC_PORT = 9999
 
 # we swap out util.enabled with a custom one which has the option to mock the protocol changes
 MOCK_PROTOCOL_CHANGES = {
@@ -94,9 +97,10 @@ def rawtransactions_db(request):
 
 
 @pytest.fixture(scope='function')
-def server_db(request, cp_server):
+def server_db(request, cp_server, api_server):
     """Enable database access for unit test vectors."""
     db = database.get_connection(read_only=False, integrity_check=False)
+    api_server.db = db  # inject into api_server
     cursor = db.cursor()
     cursor.execute('''BEGIN''')
     util_test.reset_current_block_index(db)
@@ -109,6 +113,16 @@ def server_db(request, cp_server):
 
 @pytest.fixture(scope='module')
 def api_server(request, cp_server):
+    """
+    api_server fixture, for each module we bind it to a different port because we're unable to kill it
+    also `server_db` will inject itself into APIServer for each function
+    """
+
+    global TEST_RPC_PORT
+
+    config.RPC_PORT = TEST_RPC_PORT = TEST_RPC_PORT + 1
+    server.configure_rpc(config.RPC_PASSWORD)
+
     # start RPC server and wait for server to be ready
     api_server = api.APIServer()
     api_server.daemon = True
@@ -121,6 +135,8 @@ def api_server(request, cp_server):
             raise Exception("Timeout: RPC server not ready after 5s")
         else:
             time.sleep(0.001)  # attempt to query the current block_index if possible (scenarios start with empty DB so it's not always possible)
+
+    return api_server
 
 
 @pytest.fixture(scope='module')
@@ -268,7 +284,7 @@ def add_fn_property(**kwargs):
 def init_mock_functions(request, monkeypatch, mock_utxos, rawtransactions_db):
     """Test suit mock functions.
 
-    Mock functions override default behaviour to allow test suit to work - for instance, date_passed is overwritten 
+    Mock functions override default behaviour to allow test suit to work - for instance, date_passed is overwritten
     so that every date will pass. Those are available to every test function in this suite."""
 
     util_test.rawtransactions_db = rawtransactions_db
@@ -300,7 +316,7 @@ def init_mock_functions(request, monkeypatch, mock_utxos, rawtransactions_db):
         address = '_'.join([str(signatures_required)] + sorted(pubkeys) + [str(len(pubkeys))])
         return address
 
-    def mocked_getrawtransaction(tx_hash, verbose=False):
+    def mocked_getrawtransaction(tx_hash, verbose=False, skip_missing=False):
         return util_test.getrawtransaction(rawtransactions_db, tx_hash, verbose=verbose)
 
     def mocked_getrawtransaction_batch(txhash_list, verbose=False, skip_missing=False):
