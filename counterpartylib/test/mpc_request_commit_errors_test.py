@@ -25,7 +25,6 @@ ALICE_WIF = DP["addresses"][0][2]
 ALICE_ADDRESS = wif2address(ALICE_WIF)
 ALICE_PUBKEY = wif2pubkey(ALICE_WIF)
 BOB_WIF = DP["addresses"][1][2]
-BOB_ADDRESS = wif2address(BOB_WIF)
 BOB_PUBKEY = wif2pubkey(BOB_WIF)
 SPEND_SECRET_HASH = "a7ec62542b0d393d43442aadf8d55f7da1e303cb"
 EXPIRE_TIME = 42
@@ -38,18 +37,10 @@ REVOKE_SECRET = (
 )
 REVOKE_SECRET_HASH = hash160hex(REVOKE_SECRET)
 
-EXPECTED_STANDARD_USAGE_XCP = {
-    "asset": "XCP",
-    "commits_active": [],
-    "commits_revoked": [],
-    "deposit_script": DEPOSIT_SCRIPT,
-    "commits_requested": [REVOKE_SECRET_HASH]
-}
-
 
 @pytest.mark.usefixtures("server_db")
 @pytest.mark.usefixtures("api_server")
-def test_standard_usage_xcp(server_db):
+def test_invalid_quantity(server_db):
 
     # send funds to deposit address
     quantity = int(100 * 1e8)
@@ -71,27 +62,18 @@ def test_standard_usage_xcp(server_db):
     assert deposit_balance == quantity
     assert DEPOSIT_ADDRESS == "2Mxa7u2xGFMEZPU44zYowZ11oapdkjXX45f"
 
-    result = util.api("mpc_request_commit", {
-        "state": {
-            "asset": "XCP",
-            "deposit_script": DEPOSIT_SCRIPT,
-            "commits_requested": [],
-            "commits_active": [],
-            "commits_revoked": []
-        },
-        "quantity": 21,
-        "revoke_secret_hash": REVOKE_SECRET_HASH
-    })
-    assert result == EXPECTED_STANDARD_USAGE_XCP
-
-
-@pytest.mark.usefixtures("server_db")
-@pytest.mark.usefixtures("api_server")
-def test_standard_usage_btc(server_db):
-    pass  # FIXME test
-
-
-@pytest.mark.usefixtures("server_db")
-@pytest.mark.usefixtures("api_server")
-def test_invalid_quantity(server_db):
-    pass  # FIXME test
+    try:
+        util.api("mpc_request_commit", {
+            "state": {
+                "asset": "XCP",
+                "deposit_script": DEPOSIT_SCRIPT,
+                "commits_requested": [],
+                "commits_active": [],
+                "commits_revoked": []
+            },
+            "quantity": quantity + 1,
+            "revoke_secret_hash": REVOKE_SECRET_HASH
+        })
+        assert False
+    except util.RPCError as e:
+        assert "InvalidTransferQuantity" in str(e)

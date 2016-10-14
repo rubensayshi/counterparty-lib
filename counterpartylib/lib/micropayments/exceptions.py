@@ -21,13 +21,6 @@ class InsufficientFunds(Exception):
         )
 
 
-class InvalidWif(Exception):
-
-    def __init__(self, wif):
-        msg = "Invalid wif: '{0}'"
-        super(InvalidWif, self).__init__(msg.format(wif))
-
-
 class InvalidPubKey(Exception):
 
     def __init__(self, pubkey):
@@ -84,25 +77,20 @@ class InvalidQuantity(Exception):
         super(InvalidQuantity, self).__init__(msg.format(x))
 
 
+class InvalidTransferQuantity(Exception):
+
+    def __init__(self, quantity, balance):
+        msg = "Amount greater total: {0} > {1}"
+        super(InvalidTransferQuantity, self).__init__(msg.format(
+            quantity, balance
+        ))
+
+
 class InvalidUnsigned(Exception):
 
     def __init__(self, x):
         msg = "Invalid unsigned: '{0}'"
         super(InvalidUnsigned, self).__init__(msg.format(x))
-
-
-class InvalidDepositScript(Exception):
-
-    def __init__(self, x):
-        msg = "Invalid deposit script: '{0}'"
-        super(InvalidDepositScript, self).__init__(msg.format(x))
-
-
-class InvalidState(Exception):
-
-    def __init__(self, x):
-        msg = "Invalid state: '{0}'"
-        super(InvalidState, self).__init__(msg.format(x))
 
 
 class IncorrectPubKey(Exception):

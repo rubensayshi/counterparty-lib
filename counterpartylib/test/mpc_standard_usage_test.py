@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import pytest
 
@@ -8,9 +9,7 @@ import pytest
 from counterpartylib.test import util_test
 from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
-
 from counterpartylib.lib import util
-
 from counterpartylib.lib.micropayments.util import b2h
 from counterpartylib.lib.micropayments.util import wif2address
 from counterpartylib.lib.micropayments.util import wif2pubkey
@@ -38,11 +37,14 @@ SPEND_SECRET_HASH = hash160hex(SPEND_SECRET)
 
 
 # deposit
+ASSET = "XCP"
+NETCODE = "XTN"
 DEPOSIT_EXPIRE_TIME = 42
 DEPOSIT_SCRIPT = scripts.compile_deposit_script(
     ALICE_PUBKEY, BOB_PUBKEY, SPEND_SECRET_HASH, DEPOSIT_EXPIRE_TIME
 )
-DEPOSIT_ADDRESS = script2address(DEPOSIT_SCRIPT, "XTN")
+DEPOSIT_ADDRESS = script2address(DEPOSIT_SCRIPT, NETCODE)
+DELAY_TIME = 2
 
 
 def get_tx(txid):
@@ -59,16 +61,16 @@ def assert_transferred(payer, payee, quantity):
 def test_usage_xcp(server_db):
 
     # check initial balances
-    alice_balance = util.get_balance(server_db, ALICE_ADDRESS, 'XCP')
-    deposit_balance = util.get_balance(server_db, DEPOSIT_ADDRESS, 'XCP')
-    bob_balance = util.get_balance(server_db, BOB_ADDRESS, 'XCP')
+    alice_balance = util.get_balance(server_db, ALICE_ADDRESS, ASSET)
+    deposit_balance = util.get_balance(server_db, DEPOSIT_ADDRESS, ASSET)
+    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
     assert alice_balance == 91950000000
     assert deposit_balance == 0
     assert bob_balance == 99999990
 
     # ===== PAYER PUBLISHES DEPOSIT =====
 
-    quantity = 41
+    deposit_quantity = 41
     result = util.api(
         method="mpc_make_deposit",
         params={
@@ -77,22 +79,12 @@ def test_usage_xcp(server_db):
             "payee_pubkey": BOB_PUBKEY,
             "spend_secret_hash": SPEND_SECRET_HASH,
             "expire_time": DEPOSIT_EXPIRE_TIME,  # in blocks
-            "quantity": quantity  # in satoshis
+            "quantity": deposit_quantity  # in satoshis
         }
     )
     alice_state = result["state"]
-    # FIXME sign deposit tx
-
-    # insert send, this automatically also creates a block
-    util_test.insert_raw_transaction(result["topublish"], server_db)
-
-    # check balances after send to deposit
-    alice_balance = util.get_balance(server_db, ALICE_ADDRESS, 'XCP')
-    deposit_balance = util.get_balance(server_db, DEPOSIT_ADDRESS, 'XCP')
-    bob_balance = util.get_balance(server_db, BOB_ADDRESS, 'XCP')
-    assert alice_balance == 91950000000 - quantity
-    assert deposit_balance == quantity
-    assert bob_balance == 99999990
+    deposit_rawtx = result["topublish"]
+    deposit_rawtx = scripts.sign_deposit(get_tx, ALICE_WIF, result["topublish"])
 
     # ===== PAYEE SETS DEPOSIT =====
 
@@ -110,9 +102,27 @@ def test_usage_xcp(server_db):
         "expected_spend_secret_hash": SPEND_SECRET_HASH
     })
 
-    assert_transferred(alice_state, bob_state, 0)
+    assert util.api("mpc_highest_commit", {"state": bob_state}) is None
+    assert util.api("mpc_deposit_ttl", {"state": bob_state}) is None
+
+    # ===== PAYER PUBLISHES DEPOSIT TX =====
+
+    # insert send, this automatically also creates a block
+    util_test.insert_raw_transaction(deposit_rawtx, server_db)
+
+    # check balances after send to deposit
+    alice_balance = util.get_balance(server_db, ALICE_ADDRESS, ASSET)
+    deposit_balance = util.get_balance(server_db, DEPOSIT_ADDRESS, ASSET)
+    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
+    assert alice_balance == 91950000000 - deposit_quantity
+    assert deposit_balance == deposit_quantity
+    assert bob_balance == 99999990
+
+    assert util.api("mpc_deposit_ttl", {"state": bob_state}) == 41
 
     # ===== TRANSFER MICRO PAYMENTS =====
+
+    assert_transferred(alice_state, bob_state, 0)
 
     revoke_secrets = {}
     for transfer_quantity in [1, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]:
@@ -134,7 +144,7 @@ def test_usage_xcp(server_db):
             "state": alice_state,
             "quantity": transfer_quantity,
             "revoke_secret_hash": revoke_secret_hash,
-            "delay_time": 2
+            "delay_time": DELAY_TIME
         })
         alice_state = result["state"]
         commit_script = result["commit_script"]
@@ -175,27 +185,73 @@ def test_usage_xcp(server_db):
 
     # ===== PAYEE CLOSES CHANNEL =====
 
-    result = util.api("mpc_highest_commit", {"state": bob_state})
-    signed_commit = scripts.sign_finalize_commit(
-        get_tx, BOB_WIF, result["commit_rawtx"], result["deposit_script"]
+    highest_commit = util.api("mpc_highest_commit", {"state": bob_state})
+    signed_commit_rawtx = scripts.sign_finalize_commit(
+        get_tx, BOB_WIF, highest_commit["rawtx"], bob_state["deposit_script"]
     )
     # insert commit, this automatically also creates a block
-    util_test.insert_raw_transaction(signed_commit, server_db)
+    util_test.insert_raw_transaction(signed_commit_rawtx, server_db)
+
+    commits = util.api("mpc_get_published_commits", {"state": alice_state})
+    assert commits == [signed_commit_rawtx]
+
+    # check balances after publishing commit
+    commit_address = script2address(highest_commit["script"], netcode=NETCODE)
+    alice_balance = util.get_balance(server_db, ALICE_ADDRESS, ASSET)
+    commit_balance = util.get_balance(server_db, commit_address, ASSET)
+    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
+    assert alice_balance == 91950000000 - deposit_quantity
+    assert commit_balance == 17
+    assert bob_balance == 99999990
 
     # ===== PAYEE RECOVERS PAYOUT =====
 
+    # let delay time pass
+    for i in range(DELAY_TIME - 1):
+        util_test.create_next_block(server_db)
+
     for payout in util.api("mpc_payouts", {"state": bob_state}):
+        commit_script = payout["commit_script"]
         signed_payout_rawtx = scripts.sign_payout_recover(
             get_tx, BOB_WIF, payout["payout_rawtx"],
-            payout["commit_script"], SPEND_SECRET
+            commit_script, SPEND_SECRET
         )
+
+        # XXX
+        # payee_before_transactions = util.api(
+        #     method="search_raw_transactions",
+        #     params={"address": BOB_ADDRESS, "unconfirmed": False}
+        # )
+
         # insert commit, this automatically also creates a block
         util_test.insert_raw_transaction(signed_payout_rawtx, server_db)
 
+        # XXX
+        # payee_after_transactions = util.api(
+        #     method="search_raw_transactions",
+        #     params={"address": BOB_ADDRESS, "unconfirmed": False}
+        # )
+        # commit_address = script2address(commit_script, netcode=NETCODE)
+        # commit_transactions = util.api(
+        #     method="search_raw_transactions",
+        #     params={"address": commit_address, "unconfirmed": False}
+        # )
+        # print("xxx", json.dumps({
+        #     "payee_transactions_before": payee_before_transactions,
+        #     "payee_transactions_after": payee_after_transactions,
+        #     "commit_transactions": commit_transactions,
+        #     "commit_address": commit_address,
+        #     "payee_address": BOB_ADDRESS
+        # }, indent=2))
+        # assert len(commit_transactions) == 2
+
     # ===== PAYER RECOVERS CHANGE =====
 
-    # let delay time pass
-    util_test.create_next_block(server_db)
+    transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": commit_address, "unconfirmed": False}
+    )
+    assert len(transactions) == 2
 
     recoverables = util.api("mpc_recoverables", {"state": alice_state})
     for change in recoverables["change"]:
@@ -206,11 +262,12 @@ def test_usage_xcp(server_db):
         # insert commit, this automatically also creates a block
         util_test.insert_raw_transaction(signed_change_rawtx, server_db)
 
-    # FIXME check payer and payee balances match expected
-    # alice_balance = util.get_balance(server_db, ALICE_ADDRESS, 'XCP')
-    # bob_balance = util.get_balance(server_db, BOB_ADDRESS, 'XCP')
+    # check payer and payee balances match expected
+    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
+    assert bob_balance == 99999990 + 17
+    # FIXME why is change note recovered?
+    # alice_balance = util.get_balance(server_db, ALICE_ADDRESS, ASSET)
     # assert alice_balance == 91950000000 - 17
-    # assert bob_balance == 99999990 + 17
 
 
 @pytest.mark.usefixtures("server_db")

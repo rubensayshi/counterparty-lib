@@ -35,6 +35,7 @@ INITIAL_STATE = {
 
 
 def get_published_commits(dispatcher, state, netcode):
+    commits_found = []
     deposit_script = state["deposit_script"]
     deposit_address = util.script2address(deposit_script, netcode)
     deposit_transactions = dispatcher.get("search_raw_transactions")(
@@ -48,9 +49,11 @@ def get_published_commits(dispatcher, state, netcode):
             address=commit_address, unconfirmed=True
         )
         for commit_transaction in commit_transactions:
+
+            # spend: deposit -> commit
             if commit_transaction["txid"] in deposit_txids:
-                return commit_transaction["hex"]  # spend: deposit -> commit
-    return None
+                commits_found.append(commit_transaction["hex"])
+    return commits_found
 
 
 def make_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
@@ -229,12 +232,7 @@ def highest_commit(dispatcher, state):
     _order_active(dispatcher, state)
     if len(state["commits_active"]) == 0:
         return None
-    commit = state["commits_active"][-1]
-
-    return {
-        "commit_rawtx": commit["rawtx"],
-        "deposit_script": state["deposit_script"],
-    }
+    return state["commits_active"][-1]
 
 
 def transferred_amount(dispatcher, state):
@@ -307,8 +305,7 @@ def recoverables(dispatcher, state, netcode, fee, regular_dust_size):
 
     else:
 
-        # If not expired and spend secret exposed by payout
-        # recover change!
+        # If not expired and spend secret exposed by payout recover change!
         address = util.script2address(deposit_script, netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
             _spend_secret = _find_spend_secret(dispatcher, state, netcode)
@@ -503,8 +500,7 @@ def _validate_transfer_quantity(dispatcher, state, quantity, netcode):
         dispatcher, state["asset"], script, netcode
     )
     if quantity > asset_balance:
-        msg = "Amount greater total: {0} > {1}"
-        raise ValueError(msg.format(quantity, asset_balance))
+        raise exceptions.InvalidTransferQuantity(quantity, asset_balance)
 
 
 def _order_active(dispatcher, state):

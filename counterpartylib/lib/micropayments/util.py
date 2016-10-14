@@ -31,28 +31,6 @@ def wif2address(wif):
     return Key.from_text(wif).address()
 
 
-def wif2secretexponent(wif):
-    return Key.from_text(wif).secret_exponent()
-
-
-def wif2privkey(wif):
-    key = Key.from_text(wif)
-    secret_exp = key.secret_exponent()
-    return to_bytes_32(secret_exp)
-
-
-def wif2netcode(wif):
-    key = Key.from_text(wif)
-    return key.netcode()
-
-
-def decode_pubkey(pubkey):
-    """Decode compressed hex pubkey."""
-    compressed_pubkey = h2b(pubkey)
-    public_pair = sec_to_public_pair(compressed_pubkey)
-    return public_pair_to_sec(public_pair, compressed=False)
-
-
 def pubkey2address(pubkey, netcode="BTC"):
     return sec2address(h2b(pubkey), netcode=netcode)
 
