@@ -27,27 +27,37 @@ BOB_ADDRESS = wif2address(BOB_WIF)
 @pytest.mark.usefixtures("api_server")
 def test_search_tx(server_db):
 
+    transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": BOB_ADDRESS, "unconfirmed": False}
+    )
+    assert len(transactions) == 0
+
+    # send funds to bob
     rawtx = util.api('create_send', {
         'source': ALICE_ADDRESS,
         'destination': BOB_ADDRESS,
         'asset': 'XCP',
-        'quantity': 42
+        'quantity': 42,
+        'regular_dust_size': 25000,
     })
-
-    transactions = util.api(
-        method="search_raw_transactions",
-        params={
-            "address": BOB_ADDRESS,
-            "unconfirmed": False
-        }
-    )
-    assert len(transactions) == 0
-
-    # insert send, this automatically also creates a block
     util_test.insert_raw_transaction(rawtx, server_db)
-
     transactions = util.api(
         method="search_raw_transactions",
         params={"address": BOB_ADDRESS, "unconfirmed": False}
     )
     assert len(transactions) == 1
+
+    # return funds to alice
+    rawtx = util.api('create_send', {
+        'destination': ALICE_ADDRESS,
+        'source': BOB_ADDRESS,
+        'asset': 'XCP',
+        'quantity': 42
+    })
+    util_test.insert_raw_transaction(rawtx, server_db)
+    transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": BOB_ADDRESS, "unconfirmed": False}
+    )
+    assert len(transactions) == 2

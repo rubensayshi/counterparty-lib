@@ -1,5 +1,4 @@
 import os
-import json
 import tempfile
 import pytest
 
@@ -68,7 +67,7 @@ def test_usage_xcp(server_db):
     assert deposit_balance == 0
     assert bob_balance == 99999990
 
-    # ===== PAYER PUBLISHES DEPOSIT =====
+    # ===== PAYER CREATES DEPOSIT TX =====
 
     deposit_quantity = 41
     result = util.api(
@@ -87,13 +86,6 @@ def test_usage_xcp(server_db):
     deposit_rawtx = scripts.sign_deposit(get_tx, ALICE_WIF, result["topublish"])
 
     # ===== PAYEE SETS DEPOSIT =====
-
-    bob_state = util.api("mpc_set_deposit", {
-        "asset": "XCP",
-        "deposit_script": DEPOSIT_SCRIPT,
-        "expected_payee_pubkey": BOB_PUBKEY,
-        "expected_spend_secret_hash": SPEND_SECRET_HASH
-    })
 
     bob_state = util.api("mpc_set_deposit", {
         "asset": "XCP",
@@ -247,11 +239,12 @@ def test_usage_xcp(server_db):
 
     # ===== PAYER RECOVERS CHANGE =====
 
-    transactions = util.api(
-        method="search_raw_transactions",
-        params={"address": commit_address, "unconfirmed": False}
-    )
-    assert len(transactions) == 2
+    # XXX
+    # transactions = util.api(
+    #     method="search_raw_transactions",
+    #     params={"address": commit_address, "unconfirmed": False}
+    # )
+    # assert len(transactions) == 2
 
     recoverables = util.api("mpc_recoverables", {"state": alice_state})
     for change in recoverables["change"]:

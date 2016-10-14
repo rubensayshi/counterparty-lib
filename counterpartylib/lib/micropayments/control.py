@@ -599,10 +599,7 @@ def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
 def _find_spend_secret(dispatcher, state, netcode):
     for commit in state["commits_active"] + state["commits_revoked"]:
         script = commit["script"]
-        address = util.script2address(
-            script, netcode=netcode
-        )
-
+        address = util.script2address(script, netcode=netcode)
         transactions = dispatcher.get("search_raw_transactions")(address)
         if len(transactions) == 1:
             continue  # only the commit, no payout
