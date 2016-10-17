@@ -178,7 +178,9 @@ def add_commit(dispatcher, state, commit_rawtx, commit_script, netcode):
             })
             return state
 
-    raise ValueError("No revoke secret for given commit script.")
+    raise exceptions.NoRevokeSecretForCommit(
+        commit_script, script_revoke_secret_hash
+    )
 
 
 def revoke_hashes_until(dispatcher, state, quantity, surpass):

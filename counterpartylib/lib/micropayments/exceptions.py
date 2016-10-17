@@ -3,6 +3,18 @@
 # License: MIT (see LICENSE file)
 
 
+class NoRevokeSecretForCommit(Exception):
+
+    def __init__(self, commit_script, script_revoke_secret_hash):
+        msg = (
+            "No revoke secret hash found!"
+            " Commit script: {0}, Revoke secret hash: {1}"
+        )
+        super(NoRevokeSecretForCommit, self).__init__(msg.format(
+            commit_script, script_revoke_secret_hash
+        ))
+
+
 class ChannelAlreadyUsed(Exception):
 
     def __init__(self, channel_address, transactions):
