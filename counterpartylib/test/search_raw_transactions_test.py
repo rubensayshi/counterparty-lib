@@ -8,8 +8,8 @@ from counterpartylib.test import util_test
 from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
 from counterpartylib.lib import util
-from counterpartylib.lib.micropayments.util import wif2address
-from counterpartylib.lib.micropayments.util import random_wif
+from micropayment_core.keys import address_from_wif
+from micropayment_core.util import generate_wif
 
 
 FIXTURE_SQL_FILE = CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql'
@@ -19,8 +19,8 @@ FIXTURE_DB = tempfile.gettempdir() + '/fixtures.unittest_fixture.db'
 # actors
 ALICE_WIF = DP["addresses"][0][2]
 ALICE_ADDRESS = DP["addresses"][0][0]
-BOB_WIF = random_wif(netcode="XTN")
-BOB_ADDRESS = wif2address(BOB_WIF)
+BOB_WIF = generate_wif(netcode="XTN")
+BOB_ADDRESS = address_from_wif(BOB_WIF)
 
 
 @pytest.mark.usefixtures("server_db")

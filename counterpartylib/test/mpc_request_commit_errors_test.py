@@ -10,11 +10,11 @@ from counterpartylib.test.fixtures.params import DP
 
 from counterpartylib.lib import util
 
-from counterpartylib.lib.micropayments.util import wif2address
-from counterpartylib.lib.micropayments.util import wif2pubkey
-from counterpartylib.lib.micropayments.scripts import compile_deposit_script
-from counterpartylib.lib.micropayments.util import script2address
-from counterpartylib.lib.micropayments.util import hash160hex
+from micropayment_core.keys import address_from_wif
+from micropayment_core.keys import pubkey_from_wif
+from micropayment_core.util import script_address
+from micropayment_core.util import hash160hex
+from micropayment_core.scripts import compile_deposit_script
 
 
 FIXTURE_SQL_FILE = CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql'
@@ -22,16 +22,16 @@ FIXTURE_DB = tempfile.gettempdir() + '/fixtures.unittest_fixture.db'
 
 
 ALICE_WIF = DP["addresses"][0][2]
-ALICE_ADDRESS = wif2address(ALICE_WIF)
-ALICE_PUBKEY = wif2pubkey(ALICE_WIF)
+ALICE_ADDRESS = address_from_wif(ALICE_WIF)
+ALICE_PUBKEY = pubkey_from_wif(ALICE_WIF)
 BOB_WIF = DP["addresses"][1][2]
-BOB_PUBKEY = wif2pubkey(BOB_WIF)
+BOB_PUBKEY = pubkey_from_wif(BOB_WIF)
 SPEND_SECRET_HASH = "a7ec62542b0d393d43442aadf8d55f7da1e303cb"
 EXPIRE_TIME = 42
 DEPOSIT_SCRIPT = compile_deposit_script(
     ALICE_PUBKEY, BOB_PUBKEY, SPEND_SECRET_HASH, EXPIRE_TIME
 )
-DEPOSIT_ADDRESS = script2address(DEPOSIT_SCRIPT, "XTN")
+DEPOSIT_ADDRESS = script_address(DEPOSIT_SCRIPT, "XTN")
 REVOKE_SECRET = (
     "7090c90a55489d3272c6edf46b1d391c971aeea5a8cc6755e6174608752c55a9"
 )

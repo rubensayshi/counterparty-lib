@@ -1,16 +1,16 @@
 from counterpartylib.lib.micropayments import validate
 from counterpartylib.lib.micropayments import exceptions
-from counterpartylib.lib.micropayments.util import wif2pubkey
-from counterpartylib.lib.micropayments.util import random_wif
-from counterpartylib.lib.micropayments.scripts import compile_deposit_script
-from counterpartylib.lib.micropayments.scripts import compile_commit_script
-from counterpartylib.lib.micropayments.scripts import InvalidScript
+from micropayment_core.keys import pubkey_from_wif
+from micropayment_core.util import generate_wif
+from micropayment_core.scripts import compile_deposit_script
+from micropayment_core.scripts import compile_commit_script
+from micropayment_core.scripts import InvalidScript
 
 
-ALICE_WIF = random_wif(netcode="XTN")
-ALICE_PUBKEY = wif2pubkey(ALICE_WIF)
-BOB_WIF = random_wif(netcode="XTN")
-BOB_PUBKEY = wif2pubkey(BOB_WIF)
+ALICE_WIF = generate_wif(netcode="XTN")
+ALICE_PUBKEY = pubkey_from_wif(ALICE_WIF)
+BOB_WIF = generate_wif(netcode="XTN")
+BOB_PUBKEY = pubkey_from_wif(BOB_WIF)
 SPEND_SECRET_HASH = "a7ec62542b0d393d43442aadf8d55f7da1e303cb"
 DEPOSIT_SCRIPT = compile_deposit_script(
     ALICE_PUBKEY, BOB_PUBKEY, SPEND_SECRET_HASH, 42

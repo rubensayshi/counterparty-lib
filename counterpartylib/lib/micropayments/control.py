@@ -5,10 +5,12 @@
 
 import copy
 import pycoin
-from . import util
 from . import validate
 from . import exceptions
-from . import scripts
+from micropayment_core import util
+from micropayment_core import keys
+from micropayment_core import scripts
+from counterpartylib.lib import config
 
 
 INITIAL_STATE = {
@@ -37,14 +39,14 @@ INITIAL_STATE = {
 def get_published_commits(dispatcher, state, netcode):
     commits_found = []
     deposit_script = state["deposit_script"]
-    deposit_address = util.script2address(deposit_script, netcode)
+    deposit_address = util.script_address(deposit_script, netcode)
     deposit_transactions = dispatcher.get("search_raw_transactions")(
         address=deposit_address, unconfirmed=True
     )
     deposit_txids = [tx["txid"] for tx in deposit_transactions]
     commits = state["commits_active"] + state["commits_revoked"]
     for commit_script in [commit["script"] for commit in commits]:
-        commit_address = util.script2address(commit_script, netcode)
+        commit_address = util.script_address(commit_script, netcode)
         commit_transactions = dispatcher.get("search_raw_transactions")(
             address=commit_address, unconfirmed=True
         )
@@ -151,7 +153,7 @@ def add_commit(dispatcher, state, commit_rawtx, commit_script, netcode):
     # validate input
     validate.state(state)
     validate.commit_script(commit_script, state["deposit_script"])
-    deposit_address = util.script2address(
+    deposit_address = util.script_address(
         state["deposit_script"], netcode=netcode
     )
     deposit_utxos = dispatcher.get("get_unspent_txouts")(deposit_address)
@@ -308,7 +310,7 @@ def recoverables(dispatcher, state, netcode, fee, regular_dust_size):
     else:
 
         # If not expired and spend secret exposed by payout recover change!
-        address = util.script2address(deposit_script, netcode)
+        address = util.script_address(deposit_script, netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
             _spend_secret = _find_spend_secret(dispatcher, state, netcode)
             if _spend_secret is not None:
@@ -326,7 +328,7 @@ def recoverables(dispatcher, state, netcode, fee, regular_dust_size):
 
 
 def _deposit_status(dispatcher, asset, script, netcode):
-    address = util.script2address(script, netcode)
+    address = util.script_address(script, netcode)
     transactions = dispatcher.get("search_raw_transactions")(address)
     if len(transactions) == 0:
         return 0, 0, 0
@@ -347,7 +349,7 @@ def _recover_tx(dispatcher, asset, dest_address, script, netcode, fee,
                 regular_dust_size, sequence):
 
     # get channel info
-    src_address = util.script2address(script, netcode)
+    src_address = util.script_address(script, netcode)
     asset_balance, btc_balance = _get_address_balance(
         dispatcher, asset, src_address
     )
@@ -376,7 +378,7 @@ def _recover_tx(dispatcher, asset, dest_address, script, netcode, fee,
 
 def _create_recover_commit(dispatcher, asset, pubkey, script, spend_type,
                            netcode, fee, regular_dust_size):
-    dest_address = util.pubkey2address(pubkey, netcode=netcode)
+    dest_address = keys.address_from_pubkey(pubkey, netcode=netcode)
     delay_time = scripts.get_commit_delay_time(script)
     return _recover_tx(dispatcher, asset, dest_address, script, netcode, fee,
                        regular_dust_size, delay_time)
@@ -384,7 +386,7 @@ def _create_recover_commit(dispatcher, asset, pubkey, script, spend_type,
 
 def _recover_deposit(dispatcher, asset, pubkey, script, spend_type,
                      netcode, fee, regular_dust_size):
-    dest_address = util.pubkey2address(pubkey, netcode=netcode)
+    dest_address = keys.address_from_pubkey(pubkey, netcode=netcode)
     expire_time = scripts.get_deposit_expire_time(script)
     rawtx = _recover_tx(
         dispatcher, asset, dest_address, script,
@@ -408,8 +410,8 @@ def _create_commit(dispatcher, asset, deposit_script, quantity,
     )
 
     # create tx
-    src_address = util.script2address(deposit_script, netcode)
-    dest_address = util.script2address(commit_script, netcode)
+    src_address = util.script_address(deposit_script, netcode)
+    dest_address = util.script_address(commit_script, netcode)
     asset_balance, btc_balance = _get_address_balance(
         dispatcher, asset, src_address
     )
@@ -423,16 +425,23 @@ def _create_commit(dispatcher, asset, deposit_script, quantity,
     return rawtx, commit_script
 
 
+def _get_fee_multaple(factor=1, fee_per_kb=config.DEFAULT_FEE_PER_KB,
+                      regular_dust_size=config.DEFAULT_REGULAR_DUST_SIZE):
+    # FIXME try to get current values from bitcond instead
+    future_tx_fee = fee_per_kb / 2  # mpc tx always < 512 bytes
+    return int((future_tx_fee + regular_dust_size) * factor)
+
+
 def _create_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
                     spend_secret_hash, expire_time, quantity, netcode, fee,
                     regular_dust_size):
 
     script = scripts.compile_deposit_script(payer_pubkey, payee_pubkey,
                                             spend_secret_hash, expire_time)
-    dest_address = util.script2address(script, netcode)
+    dest_address = util.script_address(script, netcode)
     _validate_channel_unused(dispatcher, dest_address)
-    payer_address = util.pubkey2address(payer_pubkey, netcode)
-    extra_btc = util.get_fee_multaple(3)  # for change + commit + recover tx
+    payer_address = keys.address_from_pubkey(payer_pubkey, netcode)
+    extra_btc = _get_fee_multaple(3)  # for change + commit + recover tx
     rawtx = _create_tx(dispatcher, asset, payer_address, dest_address,
                        quantity, extra_btc, fee, regular_dust_size)
     return rawtx, script
@@ -478,7 +487,7 @@ def _get_address_balance(dispatcher, asset, address):
         return 0, 0
     asset_balance = result[0]["quantity"]
     utxos = dispatcher.get("get_unspent_txouts")(address)
-    btc_balance = sum(map(lambda utxo: util.tosatoshis(utxo["amount"]), utxos))
+    btc_balance = sum(map(lambda utxo: util.to_satoshis(utxo["amount"]), utxos))
     return asset_balance, btc_balance
 
 
@@ -528,7 +537,7 @@ def _get_payout_recoverable(dispatcher, state, netcode):
     for commit in (state["commits_active"] + state["commits_revoked"]):
         script = commit["script"]
         delay_time = scripts.get_commit_delay_time(script)
-        address = util.script2address(script, netcode=netcode)
+        address = util.script_address(script, netcode=netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
             for utxo in dispatcher.get("get_unspent_txouts")(address):
                 if utxo["confirmations"] >= delay_time:
@@ -551,7 +560,7 @@ def _can_expire_recover(dispatcher, state, netcode):
 
 def _can_deposit_spend(dispatcher, state, netcode):
     script = state["deposit_script"]
-    address = util.script2address(script, netcode)
+    address = util.script_address(script, netcode)
     return _can_spend_from_address(dispatcher, state["asset"], address)
 
 
@@ -581,7 +590,7 @@ def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
     # FIXME validate asset
 
     # get balances
-    address = util.pubkey2address(payer_pubkey, netcode)
+    address = keys.address_from_pubkey(payer_pubkey, netcode)
     asset_balance, btc_balance = _get_address_balance(
         dispatcher, asset, address
     )
@@ -601,7 +610,7 @@ def _validate_deposit(dispatcher, asset, payer_pubkey, payee_pubkey,
 def _find_spend_secret(dispatcher, state, netcode):
     for commit in state["commits_active"] + state["commits_revoked"]:
         script = commit["script"]
-        address = util.script2address(script, netcode=netcode)
+        address = util.script_address(script, netcode=netcode)
         transactions = dispatcher.get("search_raw_transactions")(address)
         if len(transactions) == 1:
             continue  # only the commit, no payout
@@ -616,7 +625,7 @@ def _get_revoke_recoverable(dispatcher, state, netcode):
     revokable = []  # (script, secret)
     for commit in state["commits_revoked"]:
         script = commit["script"]
-        address = util.script2address(script, netcode=netcode)
+        address = util.script_address(script, netcode=netcode)
         if _can_spend_from_address(dispatcher, state["asset"], address):
             revokable.append((script, commit["revoke_secret"]))
     return revokable

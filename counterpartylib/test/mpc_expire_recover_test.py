@@ -9,12 +9,12 @@ from counterpartylib.test import util_test
 from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
 from counterpartylib.lib import util
-from counterpartylib.lib.micropayments.util import b2h
-from counterpartylib.lib.micropayments.util import wif2address
-from counterpartylib.lib.micropayments.util import wif2pubkey
-from counterpartylib.lib.micropayments.util import script2address
-from counterpartylib.lib.micropayments.util import hash160hex
-from counterpartylib.lib.micropayments import scripts
+from micropayment_core.util import b2h
+from micropayment_core.keys import address_from_wif
+from micropayment_core.keys import pubkey_from_wif
+from micropayment_core.util import script_address
+from micropayment_core.util import hash160hex
+from micropayment_core import scripts
 
 
 FIXTURE_SQL_FILE = CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql'
@@ -23,11 +23,11 @@ FIXTURE_DB = tempfile.gettempdir() + '/fixtures.unittest_fixture.db'
 
 # actors
 ALICE_WIF = DP["addresses"][0][2]  # payer
-ALICE_ADDRESS = wif2address(ALICE_WIF)
-ALICE_PUBKEY = wif2pubkey(ALICE_WIF)
+ALICE_ADDRESS = address_from_wif(ALICE_WIF)
+ALICE_PUBKEY = pubkey_from_wif(ALICE_WIF)
 BOB_WIF = DP["addresses"][1][2]  # payee
-BOB_ADDRESS = wif2address(BOB_WIF)
-BOB_PUBKEY = wif2pubkey(BOB_WIF)
+BOB_ADDRESS = address_from_wif(BOB_WIF)
+BOB_PUBKEY = pubkey_from_wif(BOB_WIF)
 
 
 # secrets
@@ -42,7 +42,7 @@ DEPOSIT_EXPIRE_TIME = 42
 DEPOSIT_SCRIPT = scripts.compile_deposit_script(
     ALICE_PUBKEY, BOB_PUBKEY, SPEND_SECRET_HASH, DEPOSIT_EXPIRE_TIME
 )
-DEPOSIT_ADDRESS = script2address(DEPOSIT_SCRIPT, NETCODE)
+DEPOSIT_ADDRESS = script_address(DEPOSIT_SCRIPT, NETCODE)
 DELAY_TIME = 2
 
 

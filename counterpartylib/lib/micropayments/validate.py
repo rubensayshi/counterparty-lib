@@ -8,8 +8,8 @@ import re
 import pycoin
 from pycoin.tx import Tx
 from . import exceptions
-from . import scripts
-from . import util
+from micropayment_core import scripts
+from micropayment_core import util
 
 
 def is_string(s):
@@ -124,10 +124,10 @@ def commit_rawtx(deposit_utxos, commit_rawtx_hex,
     tx = Tx.from_hex(commit_rawtx_hex)
 
     # validate sends to commit script
-    commit_address = util.script2address(
+    commit_address = util.script_address(
         expected_commit_script_hex, netcode=netcode
     )
-    deposit_address = util.script2address(
+    deposit_address = util.script_address(
         expected_deposit_script_hex, netcode=netcode
     )
     allowed_outputs = [commit_address, deposit_address]

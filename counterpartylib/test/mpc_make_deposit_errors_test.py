@@ -7,12 +7,9 @@ from counterpartylib.test import util_test
 from counterpartylib.lib import util
 from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
-from counterpartylib.lib.micropayments.util import hash160hex
-from counterpartylib.lib.micropayments.util import wif2address
-from counterpartylib.lib.micropayments.util import wif2pubkey
-from counterpartylib.lib.micropayments.util import script2address
-from counterpartylib.lib.micropayments.util import random_wif
-from counterpartylib.lib.micropayments.scripts import compile_deposit_script
+from micropayment_core.util import hash160hex
+from micropayment_core.keys import pubkey_from_wif
+from micropayment_core.util import generate_wif
 
 
 FIXTURE_SQL_FILE = CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql'
@@ -20,9 +17,9 @@ FIXTURE_DB = tempfile.gettempdir() + '/fixtures.unittest_fixture.db'
 
 
 ALICE_WIF = DP["addresses"][0][2]
-ALICE_PUBKEY = wif2pubkey(ALICE_WIF)
+ALICE_PUBKEY = pubkey_from_wif(ALICE_WIF)
 BOB_WIF = "cPs6DTGm4fLYdXB1888Q92VWwty6AJmzkKuvpgcZw96vE8npxFKK"
-BOB_PUBKEY = wif2pubkey(BOB_WIF)
+BOB_PUBKEY = pubkey_from_wif(BOB_WIF)
 SPEND_SECRET = (
     "7090c90a55489d3272c6edf46b1d391c971aeea5a8cc6755e6174608752c55a9"
 )
@@ -70,8 +67,8 @@ def test_channel_already_used(server_db):
 @pytest.mark.usefixtures("server_db")
 @pytest.mark.usefixtures("api_server")
 def test_insufficient_funds(server_db):
-    alice_pubkey = wif2pubkey(random_wif(netcode="XTN"))
-    bob_pubkey = wif2pubkey(random_wif(netcode="XTN"))
+    alice_pubkey = pubkey_from_wif(generate_wif(netcode="XTN"))
+    bob_pubkey = pubkey_from_wif(generate_wif(netcode="XTN"))
 
     try:
         quantity = 42

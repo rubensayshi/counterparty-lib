@@ -16,4 +16,3 @@ from .control import payouts  # NOQA
 from .control import recoverables  # NOQA
 from .control import deposit_ttl  # NOQA
 from .control import get_published_commits  # NOQA
-from . import util  # NOQA
