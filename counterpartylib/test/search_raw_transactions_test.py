@@ -9,7 +9,7 @@ from counterpartylib.test.util_test import CURR_DIR
 from counterpartylib.test.fixtures.params import DP
 from counterpartylib.lib import util
 from micropayment_core.keys import address_from_wif
-from micropayment_core.util import generate_wif
+from micropayment_core.keys import generate_wif
 
 
 FIXTURE_SQL_FILE = CURR_DIR + '/fixtures/scenarios/unittest_fixture.sql'
