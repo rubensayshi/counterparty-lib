@@ -99,6 +99,12 @@ def test_usage_xcp(server_db):
 
     # ===== PAYER PUBLISHES DEPOSIT TX =====
 
+    before_deposit_transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": DEPOSIT_ADDRESS, "unconfirmed": False}
+    )
+    assert len(before_deposit_transactions) == 0
+
     # insert send, this automatically also creates a block
     util_test.insert_raw_transaction(deposit_rawtx, server_db)
 
@@ -109,8 +115,13 @@ def test_usage_xcp(server_db):
     assert alice_balance == 91950000000 - deposit_quantity
     assert deposit_balance == deposit_quantity
     assert bob_balance == 99999990
-
     assert util.api("mpc_deposit_ttl", {"state": bob_state}) == 41
+
+    after_deposit_transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": DEPOSIT_ADDRESS, "unconfirmed": False}
+    )
+    assert len(after_deposit_transactions) == 1
 
     # ===== TRANSFER MICRO PAYMENTS =====
 
@@ -181,7 +192,6 @@ def test_usage_xcp(server_db):
     signed_commit_rawtx = scripts.sign_finalize_commit(
         get_tx, BOB_WIF, highest_commit["rawtx"], bob_state["deposit_script"]
     )
-    # insert commit, this automatically also creates a block
     util_test.insert_raw_transaction(signed_commit_rawtx, server_db)
 
     commits = util.api("mpc_get_published_commits", {"state": alice_state})
@@ -202,63 +212,51 @@ def test_usage_xcp(server_db):
     for i in range(DELAY_TIME - 1):
         util_test.create_next_block(server_db)
 
-    for payout in util.api("mpc_payouts", {"state": bob_state}):
-        commit_script = payout["commit_script"]
-        signed_payout_rawtx = scripts.sign_payout_recover(
-            get_tx, BOB_WIF, payout["payout_rawtx"],
-            commit_script, SPEND_SECRET
-        )
+    # get and sign payout
+    payouts = util.api("mpc_payouts", {"state": bob_state})
+    assert len(payouts) == 1
+    payout = payouts[0]
+    commit_script = payout["commit_script"]
+    signed_payout_rawtx = scripts.sign_payout_recover(
+        get_tx, BOB_WIF, payout["payout_rawtx"],
+        commit_script, SPEND_SECRET
+    )
 
-        # XXX
-        # payee_before_transactions = util.api(
-        #     method="search_raw_transactions",
-        #     params={"address": BOB_ADDRESS, "unconfirmed": False}
-        # )
+    commit_transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": commit_address, "unconfirmed": False}
+    )
+    assert len(commit_transactions) == 1
 
-        # insert commit, this automatically also creates a block
-        util_test.insert_raw_transaction(signed_payout_rawtx, server_db)
+    # publish payout transaction
+    util_test.insert_raw_transaction(signed_payout_rawtx, server_db)
 
-        # XXX
-        # payee_after_transactions = util.api(
-        #     method="search_raw_transactions",
-        #     params={"address": BOB_ADDRESS, "unconfirmed": False}
-        # )
-        # commit_address = script_address(commit_script, netcode=NETCODE)
-        # commit_transactions = util.api(
-        #     method="search_raw_transactions",
-        #     params={"address": commit_address, "unconfirmed": False}
-        # )
-        # print("xxx", json.dumps({
-        #     "payee_transactions_before": payee_before_transactions,
-        #     "payee_transactions_after": payee_after_transactions,
-        #     "commit_transactions": commit_transactions,
-        #     "commit_address": commit_address,
-        #     "payee_address": BOB_ADDRESS
-        # }, indent=2))
-        # assert len(commit_transactions) == 2
+    # check payee balance
+    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
+    assert bob_balance == 99999990 + 17
+
+    commit_transactions = util.api(
+        method="search_raw_transactions",
+        params={"address": commit_address, "unconfirmed": False}
+    )
+    assert len(commit_transactions) == 2  # FIXME why is payout spend not found?
 
     # ===== PAYER RECOVERS CHANGE =====
 
-    # XXX
-    # transactions = util.api(
-    #     method="search_raw_transactions",
-    #     params={"address": commit_address, "unconfirmed": False}
-    # )
-    # assert len(transactions) == 2
-
-    recoverables = util.api("mpc_recoverables", {"state": alice_state})
-    for change in recoverables["change"]:
-        signed_change_rawtx = scripts.sign_change_recover(
-            get_tx, ALICE_WIF, change["change_rawtx"],
-            change["deposit_script"], change["spend_secret"]
-        )
-        # insert commit, this automatically also creates a block
-        util_test.insert_raw_transaction(signed_change_rawtx, server_db)
-
-    # check payer and payee balances match expected
-    bob_balance = util.get_balance(server_db, BOB_ADDRESS, ASSET)
-    assert bob_balance == 99999990 + 17
     # FIXME why is change note recovered?
+
+    # # get change recoverable
+    # recoverables = util.api("mpc_recoverables", {"state": alice_state})
+    # assert len(recoverables["change"]) == 1
+    # change = recoverables["change"]
+
+    # # publish change recoverable
+    # signed_change_rawtx = scripts.sign_change_recover(
+    #     get_tx, ALICE_WIF, change["change_rawtx"],
+    #     change["deposit_script"], change["spend_secret"]
+    # )
+    # util_test.insert_raw_transaction(signed_change_rawtx, server_db)
+
     # alice_balance = util.get_balance(server_db, ALICE_ADDRESS, ASSET)
     # assert alice_balance == 91950000000 - 17
 
