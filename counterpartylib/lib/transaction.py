@@ -507,9 +507,12 @@ def construct (db, tx_info, encoding='auto',
         btc_out = destination_btc_out + data_btc_out
         change_quantity = btc_in - (btc_out + final_fee)
         logger.debug('Size: {} Fee: {:.8f} Change quantity: {:.8f} BTC'.format(size, final_fee / config.UNIT, change_quantity / config.UNIT))
-        # If change is necessary, must not be a dust output.
-        if change_quantity == 0 or change_quantity >= regular_dust_size:
+
+        # if change is not negative then we have sufficient
+        if change_quantity >= 0:
             sufficient_funds = True
+
+            # continue coin selection if we desire more inputs than we currently have
             if len(inputs) >= desired_input_count:
                 break
 
@@ -519,6 +522,11 @@ def construct (db, tx_info, encoding='auto',
         btc_out = destination_btc_out + data_btc_out
         total_btc_out = btc_out + max(change_quantity, 0) + final_fee
         raise exceptions.BalanceError('Insufficient {} at address {}. (Need approximately {} {}.) To spend unconfirmed coins, use the flag `--unconfirmed`. (Unconfirmed coins cannot be spent from multi‐sig addresses.)'.format(config.BTC, source, total_btc_out / config.UNIT, config.BTC))
+
+    # if change is less than dust we should instead give it to the miners as fee
+    if change_quantity < regular_dust_size:
+        final_fee += change_quantity
+        change_quantity = 0
 
     # Lock the source's inputs (UTXOs) chosen for this transaction
     if UTXO_LOCKS is not None and not disable_utxo_locks:
