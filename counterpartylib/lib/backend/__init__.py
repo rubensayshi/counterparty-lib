@@ -108,24 +108,11 @@ def get_tx_list(block):
 
     return (tx_hash_list, raw_transactions)
 
-def input_value_weight(amount):
-    # Prefer outputs less than dust size, then bigger is better.
-    if amount * config.UNIT <= config.DEFAULT_REGULAR_DUST_SIZE:
-        return 0
-    else:
-        return 1 / amount
-
 def sort_unspent_txouts(unspent, unconfirmed=False):
-    # Get deterministic results (for multiAPIConsensus type requirements), sort by timestamp and vout index.
-    # (Oldest to newest so the nodes don’t have to be exactly caught up to each other for consensus to be achieved.)
-    # searchrawtransactions doesn’t support unconfirmed transactions
-    try:
-        unspent = sorted(unspent, key=sortkeypicker(['ts', 'vout']))
-    except KeyError: # If timestamp isn’t given.
-        pass
-
-    # Sort by amount.
-    unspent = sorted(unspent, key=lambda x: input_value_weight(x['amount']))
+    # Filter out all dust amounts to avoid bloating the resultant transaction
+    unspent = list(filter(lambda x: x['amount'] * config.UNIT > config.DEFAULT_MULTISIG_DUST_SIZE, unspent))
+    # Sort by amount, using the largest UTXOs available
+    unspent = sorted(unspent, key=lambda x: x['amount'], reverse=True)
 
     return unspent
 
@@ -145,7 +132,7 @@ def get_btc_supply(normalize=False):
             blocks_remaining = 0
     return total_supply if normalize else int(total_supply * config.UNIT)
 
-def is_scriptpubkey_spendable(scriptpubkey_hex, source, multisig_inputs=False):
+def is_scriptpubkey_spendable(scriptpubkey_hex, source):
     c_scriptpubkey = bitcoinlib.core.CScript(bitcoinlib.core.x(scriptpubkey_hex))
 
     try:
@@ -166,13 +153,13 @@ def is_scriptpubkey_spendable(scriptpubkey_hex, source, multisig_inputs=False):
 class MempoolError(Exception):
     pass
 
-def get_unspent_txouts(source, unconfirmed=False, multisig_inputs=False, unspent_tx_hash=None):
+def get_unspent_txouts(source, unconfirmed=False, unspent_tx_hash=None):
     """returns a list of unspent outputs for a specific address
     @return: A list of dicts, with each entry in the dict having the following keys:
     """
     if not MEMPOOL_CACHE_INITIALIZED:
         raise MempoolError('Mempool is not yet ready; please try again in a few minutes.')
-    
+
     # Get all outputs.
     logger.debug('Getting outputs for {}'.format(source))
     if unspent_tx_hash:
