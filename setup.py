@@ -251,6 +251,9 @@ setup_options = {
     'zip_safe': False,
     'setup_requires': ['appdirs', 'setuptools-markdown'],
     'install_requires': required_packages,
+    'dependency_links': [
+        'git+https://github.com/CounterpartyXCP/python-bitcoinlib.git@112d66b11cde30b9c7e10895f057baab13cc35ec#egg=python-bitcoinlib-0.7.0'
+    ],
     'include_package_data': True,
     'cmdclass': {
         'install': install,

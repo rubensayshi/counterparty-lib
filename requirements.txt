@@ -1,4 +1,5 @@
 --index-url https://pypi.python.org/simple/
 
+git+https://github.com/CounterpartyXCP/python-bitcoinlib.git@112d66b11cde30b9c7e10895f057baab13cc35ec#egg=python-bitcoinlib-0.7.0
 requests>=2.8.1
 -e .
